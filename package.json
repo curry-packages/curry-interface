@@ -11,7 +11,8 @@
         "currypath"     : ">= 3.0.0, < 4.0.0",
         "directory"     : ">= 3.0.0, < 4.0.0",
         "filepath"      : ">= 3.0.0, < 4.0.0",
-        "frontend-exec" : ">= 3.0.0, < 4.0.0"
+        "frontend-exec" : ">= 3.0.0, < 4.0.0",
+        "det-parse"     : ">= 3.0.0, < 4.0.0"
     },
     "exportedModules": [ "CurryInterface.Files", "CurryInterface.Types" ],
     "source": {
