@@ -10,13 +10,18 @@ import Prelude hiding ((*>), (<*), (<*>), (<$>), many, empty)
 import DetParse
 
 --- A parser for the text of a Curry interface.
-parseCurryInterface :: Parser Interface
-parseCurryInterface =
+parseCurryInterface :: String -> Interface
+parseCurryInterface txt = case parse parseInterface txt of
+    Nothing -> error "Parsing failed"
+    Just i -> i
+--parseCurryInterface _ = error "parseCurryInterface not yet implemented"
+
+parseInterface :: Parser Interface
+parseInterface =
     Interface <$>
         (tokenInterface **> parseModuleIdent) <**>
         (tokenWhere **> tokenCurlyBracketL **> parseImportDecls) <**>
         (parseDecls <** tokenCurlyBracketR)
---parseCurryInterface _ = error "parseCurryInterface not yet implemented"
 
 parseModuleIdent :: Parser ModuleIdent
 parseModuleIdent = missing "parseModuleIdent"
