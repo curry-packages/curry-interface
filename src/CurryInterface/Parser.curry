@@ -6,14 +6,52 @@ module CurryInterface.Parser where
 
 import CurryInterface.Types
 
+import Prelude hiding ((*>), (<*), (<*>), (<$>), many, empty)
 import DetParse
 
 --- A parser for the text of a Curry interface.
-parseCurryInterface :: String -> Interface
-parseCurryInterface _ = error "parseCurryInterface not yet implemented"
+parseCurryInterface :: Parser Interface
+parseCurryInterface =
+    Interface <$>
+        (tokenInterface **> parseModuleIdent) <**>
+        (tokenWhere **> tokenCurlyBracketL **> parseImportDecls) <**>
+        (parseDecls <** tokenCurlyBracketR)
+--parseCurryInterface _ = error "parseCurryInterface not yet implemented"
 
+parseModuleIdent :: Parser ModuleIdent
+parseModuleIdent = missing "parseModuleIdent"
+
+parseImportDecls :: Parser [IImportDecl]
+parseImportDecls = many parseImportDecl
+
+parseDecls :: Parser [IDecl]
+parseDecls = many parseDecl
+
+parseImportDecl :: Parser IImportDecl
+parseImportDecl = missing "parseImportDecl"
+
+parseDecl :: Parser IDecl
+parseDecl = missing "parseDecl"
 
 --- Helper parser
+
+--- Debug function to fail with an error message of which function is not yet implemented.
+missing :: String -> Parser a
+missing name = (\_ -> error (name ++ " not yet implemented"))
+
+infixl 4 <**>, <**, **>
+
+(<**>) :: Parser (a -> b) -> Parser a -> Parser b
+pa <**> pb = (pa <* skipWhitespace) <*> pb <* skipWhitespace
+
+(**>) :: Parser a -> Parser b -> Parser b
+pa **> pb = pa *> skipWhitespace *> pb <* skipWhitespace
+
+(<**) :: Parser a -> Parser b -> Parser a
+pa <** pb = pa <* skipWhitespace <* pb <* skipWhitespace
+
+skipWhitespace :: Parser ()
+skipWhitespace = many (check isSpace anyChar) *> empty
 
 --- Keyword parser
 
