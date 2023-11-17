@@ -6,7 +6,7 @@ module CurryInterface.Parser where
 
 import CurryInterface.Types
 
-import Prelude hiding ((*>), (<*), (<*>), (<$>), (<|>), many, empty, some)
+import Prelude hiding ((*>), (<*), (<*>), (<$>), (<|>), many, empty, some, failure)
 import Data.List (init, last)
 import DetParse
 
@@ -148,7 +148,7 @@ parseOperator = some (check condition anyChar)
     condition c = isSpecial c && c /= '(' && c /= ')'
 
 parseTypeVariable :: Parser String
-parseTypeVariable = (:) <$> check isAlpha anyChar <*> many (check condition anyChar)
+parseTypeVariable = (:) <$> check isLower anyChar <*> many (check condition anyChar)
     where
     condition c = isAlpha c || isDigit c
 
@@ -184,7 +184,70 @@ parseDataRecord =
         )
 
 parseTypeExpr :: Parser TypeExpr
-parseTypeExpr = missing "parseTypeExpr"
+parseTypeExpr = type0
+    where
+    -- type0 ::= type1 ['->' type0]
+    type0 :: Parser TypeExpr
+    type0 = convert <$> type1 <**> (Just <$> (tokenArrow **> type0) <!> yield Nothing)
+        where
+        convert t1 Nothing   = t1
+        convert t1 (Just t0) = ArrowType t1 t0
+    
+    -- type1 ::= [type1] type2
+    type1 :: Parser TypeExpr
+    type1 = foldl1 ApplyType <$> some (skipWhitespace *> type2)
+
+    -- type2 ::= identType | parenType | bracketType
+    type2 :: Parser TypeExpr
+    type2 = identType <|> parenType <|> bracketType
+
+    identType :: Parser TypeExpr
+    identType = variableType <|> constructorType
+
+    variableType :: Parser TypeExpr
+    variableType = VariableType <$> (flip Ident 0 <$> parseTypeVariable)
+
+    constructorType :: Parser TypeExpr
+    constructorType = ConstructorType <$> parseQualType
+
+    -- parenType ::= '(' tupleType ')'
+    parenType :: Parser TypeExpr
+    parenType = tokenParenL **> tupleType <** tokenParenR
+
+    -- tupleType ::= type0
+    --            |  type0 ',' type0 { ',' type0 }
+    --            |  
+    tupleType :: Parser TypeExpr
+    tupleType = convert <$> ((:) <$> type0 <**> many (tokenComma **> type0) <|> yield [])
+        where
+        convert ts = case ts of
+            [t] -> t
+            _   -> TupleType ts
+
+    -- bracketType ::= '[' type0 ']'
+    bracketType :: Parser TypeExpr
+    bracketType = ListType <$> (toList <$> (tokenBracketL **> type0 <** tokenBracketR))
+
+-- qualType ::= [context '=>'] type0
+parseQualTypeExpr :: Parser QualTypeExpr
+parseQualTypeExpr = QualTypeExpr <$> parseContext <**> parseTypeExpr
+
+parseContext :: Parser Context
+parseContext =
+    (
+        toList <$> parseConstraint <|>
+        tokenParenL *> ((:) <$> parseConstraint <**> many (tokenComma **> parseConstraint)) <* tokenParenR
+    ) <** tokenDoubleArrow <|> yield []
+
+parseConstraint :: Parser Constraint
+parseConstraint = 
+    Constraint <$> parseQualType <**> parseTypeExpr
+
+parseQualType :: Parser QualIdent
+parseQualType = check condition parseQualIdent <|> failure
+    where
+    condition (QualIdent (Just (ModuleIdent ids)) (Ident id _)) = all (isUpper . head) ids && (isUpper . head) id
+    condition (QualIdent Nothing (Ident id _)) = (isUpper . head) id
 
 parseFieldDecl :: Parser FieldDecl
 parseFieldDecl =
@@ -322,3 +385,9 @@ tokenPragmaMethod = word "METHOD"
 
 tokenPragmaModule :: Parser ()
 tokenPragmaModule = word "MODULE"
+
+tokenBracketL :: Parser ()
+tokenBracketL = char '['
+
+tokenBracketR :: Parser ()
+tokenBracketR = char ']'
