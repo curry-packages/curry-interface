@@ -64,30 +64,79 @@ parseHidingDataDecl = --missing "parseHidingDataDecl"
 
 parseDataDecl :: Parser IDecl
 parseDataDecl =
-    IDataDecl <$>
-        (tokenData **> parseQualIdent) <**>
-        yield Nothing <**>
-        (map (flip Ident 0) <$> parseTypeVariableList) <**>
-        (tokenEqual **> ((:) <$> parseData <**> many (tokenPipe **> parseData))) <**>
-        parsePragma
+    convert <$> leftSide <**> (tokenEqual **> rightSide) <**> parsePragma
+    where
+    convert :: (QualIdent, Maybe KindExpr, [Ident]) -> [ConstrDecl] -> [Ident] -> IDecl
+    convert (qi, mk, ids) cs ps = IDataDecl qi mk ids cs ps
+
+    leftSide :: Parser (QualIdent, Maybe KindExpr, [Ident])
+    leftSide =
+        (,,) <$> (tokenData **> parseQualIdent) <**> parseMaybeKind <**> (map (flip Ident 0) <$> parseTypeVariableList)
+
+    rightSide :: Parser [ConstrDecl]
+    rightSide = (:) <$> parseData <**> many (tokenPipe **> parseData)
 
 parseNewtypeDecl :: Parser IDecl
-parseNewtypeDecl = missing "parseNewtypeDecl"
+parseNewtypeDecl =
+    convert <$> leftSide <**> (tokenEqual **> rightSide) <**> parsePragma
+    where
+    convert :: (QualIdent, Maybe KindExpr, [Ident]) -> NewConstrDecl -> [Ident] -> IDecl
+    convert (qi, mk, ids) nc ps = INewtypeDecl qi mk ids nc ps
+
+    leftSide :: Parser (QualIdent, Maybe KindExpr, [Ident])
+    leftSide = (,,) <$> (tokenNewtype **> parseQualIdent) <**> parseMaybeKind <**> (map (flip Ident 0) <$> parseTypeVariableList)
+
+    rightSide :: Parser NewConstrDecl
+    rightSide = parseNewtype
 
 parseTypeDecl :: Parser IDecl
-parseTypeDecl = missing "parseTypeDecl"
+parseTypeDecl =
+    convert <$> leftSide <**> (tokenEqual **> rightSide)
+    where
+    convert :: (QualIdent, Maybe KindExpr, [Ident]) -> TypeExpr -> IDecl
+    convert (qi, mk, ids) t = ITypeDecl qi mk ids t
+
+    leftSide :: Parser (QualIdent, Maybe KindExpr, [Ident])
+    leftSide = (,,) <$> (tokenType **> parseQualIdent) <**> parseMaybeKind <**> (map (flip Ident 0) <$> parseTypeVariableList)
+
+    rightSide :: Parser TypeExpr
+    rightSide = parseTypeExpr
 
 parseFunctionDecl :: Parser IDecl
-parseFunctionDecl = missing "parseFunctionDecl"
+parseFunctionDecl =
+    IFunctionDecl <$>
+        parseQualIdent <**>
+        optional parseMethodPragma <**>
+        parseArity <**>
+        (tokenTyping **> parseQualTypeExpr)
 
 parseHidingClassDecl :: Parser IDecl
-parseHidingClassDecl = missing "parseHidingClassDecl"
+parseHidingClassDecl =
+    HidingClassDecl <$>
+        (tokenHiding **> tokenClass **> parseContext) <**>
+        parseQualIdent <**>
+        parseMaybeKind <**>
+        (flip Ident 0 <$> parseTypeVariable)
 
 parseClassDecl :: Parser IDecl
-parseClassDecl = missing "parseClassDecl"
+parseClassDecl = 
+    IClassDecl <$>
+        (tokenClass **> parseContext) <**>
+        parseQualIdent <**>
+        parseMaybeKind <**>
+        (flip Ident 0 <$> parseTypeVariable) <**>
+        (tokenCurlyBracketL **> parseList tokenSemicolon parseMethodDecl <** tokenCurlyBracketR) <**>
+        parsePragma
 
+-- SOMETHING WRONG
 parseInstanceDecl :: Parser IDecl
-parseInstanceDecl = missing "parseInstanceDecl"
+parseInstanceDecl =
+    IInstanceDecl <$>
+        (tokenInstance **> parseContext) <**>
+        parseQualIdent <**>
+        parseInstanceType <**>
+        (tokenCurlyBracketL **> parseList tokenSemicolon parseMethodImpl <** tokenCurlyBracketR) <**>
+        optional parseModulePragma
 
 {-
 JUST AN OVERVIEW OF THE TYPE
@@ -143,9 +192,12 @@ parseIdent = some (check condition anyChar)
 -}
 
 parseOperator :: Parser String
-parseOperator = some (check condition anyChar)
+parseOperator = check stringCondition (some (check charCondition anyChar))
     where
-    condition c = isSpecial c && c /= '(' && c /= ')'
+    charCondition c = elem c allowed
+    stringCondition s = not (elem s exceptions)
+    allowed = "!#$%&*+./<=>?@\\^|-~:"
+    exceptions = ["..", ":", "::", "=", "\\", "|", "<-", "->", "@", "~", "=>"]
 
 parseTypeVariable :: Parser String
 parseTypeVariable = (:) <$> check isLower anyChar <*> many (check condition anyChar)
@@ -156,19 +208,27 @@ parseTypeVariableList :: Parser [String]
 parseTypeVariableList = many (skipWhitespace *> parseTypeVariable)
 
 parsePragma :: Parser [Ident]
-parsePragma = tokenPragmaL **> tokenPragma **> (map (flip Ident 0) <$> parseIdentList) <** tokenPragmaR
+parsePragma =
+    (tokenPragmaL **> tokenPragma **> (map (flip Ident 0) <$> parseIdentList) <** tokenPragmaR) <|> yield []
+
+parseSinglePragma :: Parser () -> Parser Ident
+parseSinglePragma token = tokenPragmaL **> token **> (flip Ident 0 <$> parseIdent) <** tokenPragmaR
+
+parseMethodPragma :: Parser Ident
+parseMethodPragma = parseSinglePragma tokenPragmaMethod
+
+parseModulePragma :: Parser ModuleIdent
+parseModulePragma = tokenPragmaL **> tokenPragmaModule **> parseModuleIdent <** tokenPragmaR
 
 parseData :: Parser ConstrDecl
 parseData = choice
-    [ parseDataConstructor
-    , parseDataConOp
-    , parseDataRecord]
+    [ parseDataConOp
+    , parseDataRecord
+    , parseDataConstructor]
 
 parseDataConstructor :: Parser ConstrDecl
 parseDataConstructor =
-    ConstrDecl <$> 
-        (flip Ident 0 <$> parseIdent) <**>
-        many (skipWhitespace *> parseTypeExpr)
+    (uncurry ConstrDecl) <$> parseConstructor
 
 parseDataConOp :: Parser ConstrDecl
 parseDataConOp = ConOpDecl <$> parseTypeExpr <**> (flip Ident 0 <$> parseOperator) <**> parseTypeExpr
@@ -188,7 +248,7 @@ parseTypeExpr = type0
     where
     -- type0 ::= type1 ['->' type0]
     type0 :: Parser TypeExpr
-    type0 = convert <$> type1 <**> (Just <$> (tokenArrow **> type0) <!> yield Nothing)
+    type0 = convert <$> type1 <**> (optional (tokenArrow **> type0))
         where
         convert t1 Nothing   = t1
         convert t1 (Just t0) = ArrowType t1 t0
@@ -255,6 +315,54 @@ parseFieldDecl =
         (map (flip Ident 0) <$> parseIdentList) <**>
         (tokenTyping **> parseTypeExpr)
 
+parseMaybeKind :: Parser (Maybe KindExpr)
+parseMaybeKind = yield Nothing
+
+parseNewtype :: Parser NewConstrDecl
+parseNewtype = parseNewConstr <|> parseNewRecord
+
+parseNewConstr :: Parser NewConstrDecl
+parseNewConstr = 
+    parseConstructor *>= convert
+    where
+    convert :: (Ident, [TypeExpr]) -> Parser NewConstrDecl
+    convert (i, ts) = case ts of
+        [t] -> yield (NewConstrDecl i t)
+        _ -> failure
+
+parseNewRecord :: Parser NewConstrDecl
+parseNewRecord =
+    NewRecordDecl <$>
+        (flip Ident 0 <$> parseIdent) <**>
+        (
+            tokenCurlyBracketL **>
+            parseNewField
+            <** tokenCurlyBracketR
+        )
+    where
+    parseNewField :: Parser (Ident, TypeExpr)
+    parseNewField = (,) <$> (flip Ident 0 <$> parseIdent) <**> (tokenTyping **> parseTypeExpr)
+
+parseConstructor :: Parser (Ident, [TypeExpr])
+parseConstructor = 
+    (,) <$>
+        (flip Ident 0 <$> parseIdent) <**>
+        many (skipWhitespace *> parseTypeExpr)
+
+parseMethodDecl :: Parser IMethodDecl
+parseMethodDecl =
+    IMethodDecl <$>
+        (flip Ident 0 <$> parseIdent) <**>
+        optional parseArity <**>
+        (tokenTyping **> parseQualTypeExpr)
+
+parseInstanceType :: Parser InstanceType
+parseInstanceType = parseTypeExpr
+
+parseMethodImpl :: Parser (Ident, Arity)--IMethodImpl
+parseMethodImpl = 
+    (,) <$> (flip Ident 0 <$> (parseIdent <|> (tokenParenL **> parseOperator <** tokenParenR))) <**> parseArity
+
 --- Helper Functions
 isSpecial :: Char -> Bool
 isSpecial c = not (isDigit c) && not (isAlpha c)
@@ -279,6 +387,11 @@ digit = check isDigit anyChar
 choice :: [Parser a] -> Parser a
 choice = foldr1 (<|>)
 
+parseList :: Parser () -> Parser a -> Parser [a]
+parseList psep pelem = ((:) <$> pelem <**> many (psep **> pelem)) <|> yield []
+
+optional :: Parser a -> Parser (Maybe a)
+optional p = Just <$> p <|> yield Nothing
 
 --- Debug function to fail with an error message of which function is not yet implemented.
 missing :: String -> Parser a
@@ -391,3 +504,9 @@ tokenBracketL = char '['
 
 tokenBracketR :: Parser ()
 tokenBracketR = char ']'
+
+tokenNewtype :: Parser ()
+tokenNewtype = word "newtype"
+
+tokenType :: Parser ()
+tokenType = word "type"
