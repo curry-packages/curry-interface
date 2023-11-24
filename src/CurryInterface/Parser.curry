@@ -128,7 +128,6 @@ parseClassDecl =
         (tokenCurlyBracketL **> parseList tokenSemicolon parseMethodDecl <** tokenCurlyBracketR) <**>
         parsePragma
 
--- SOMETHING WRONG
 parseInstanceDecl :: Parser IDecl
 parseInstanceDecl =
     IInstanceDecl <$>
@@ -293,11 +292,17 @@ parseQualTypeExpr :: Parser QualTypeExpr
 parseQualTypeExpr = QualTypeExpr <$> parseContext <**> parseTypeExpr
 
 parseContext :: Parser Context
-parseContext =
-    (
-        toList <$> parseConstraint <|>
-        tokenParenL *> ((:) <$> parseConstraint <**> many (tokenComma **> parseConstraint)) <* tokenParenR
-    ) <** tokenDoubleArrow <|> yield []
+parseContext = choice [parseNoContext, parseContextList, parseSingleContext]
+    where
+    parseContextList :: Parser Context
+    parseContextList = tokenParenL **> parseList tokenComma parseConstraint <** tokenParenR <** tokenDoubleArrow
+
+    parseSingleContext :: Parser Context
+    parseSingleContext = toList <$> parseConstraint <** tokenDoubleArrow
+
+    parseNoContext :: Parser Context
+    parseNoContext = yield []
+
 
 parseConstraint :: Parser Constraint
 parseConstraint = 
@@ -319,7 +324,7 @@ parseMaybeKind :: Parser (Maybe KindExpr)
 parseMaybeKind = yield Nothing
 
 parseNewtype :: Parser NewConstrDecl
-parseNewtype = parseNewConstr <|> parseNewRecord
+parseNewtype = parseNewRecord <|> parseNewConstr
 
 parseNewConstr :: Parser NewConstrDecl
 parseNewConstr = 
