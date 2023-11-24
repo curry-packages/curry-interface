@@ -151,10 +151,7 @@ instanceDecl =
 
 --- A parser for an Infix expression | {infixl | infixr | infix}
 iInfix :: Parser Infix
-iInfix = choice
-    [ word "infixl" *> yield InfixL
-    , word "infixr" *> yield InfixR
-    , word "infix"  *> yield Infix]
+iInfix = word "infix" *> choice [char 'l' *> yield InfixL, char 'r' *> yield InfixR, yield Infix]
 
 --- A parser for a Precedence
 precedence :: Parser Precedence
