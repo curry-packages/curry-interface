@@ -44,28 +44,39 @@ importDecl = IImportDecl <$> (tokenImport **> moduleIdent <** tokenSemicolon)
 --- A parser for a Declaration.
 decl :: Parser IDecl
 decl = choice
-    [ infixDecl
-    , hidingDataDecl
+    [ hidingDecl
+    , infixDecl
     , dataDecl
     , newtypeDecl
     , typeDecl
-    , functionDecl
-    , hidingClassDecl
     , classDecl
     , instanceDecl
+    , functionDecl
     ] <** tokenSemicolon
 
 --- A parser for an Infix Declaration | Infix Arity Op
 infixDecl :: Parser IDecl
 infixDecl = IInfixDecl <$> iInfix <**> precedence <**> qualIdent
 
+hidingDecl :: Parser IDecl
+hidingDecl = tokenHiding **> (hidingDataDecl <|> hidingClassDecl)
+
 --- A parser for a Hiding Data Declaration | hiding data QualIdent [KindExpr] TypeVariableList
 hidingDataDecl :: Parser IDecl
 hidingDataDecl =
     HidingDataDecl <$>
-        (tokenHiding **> tokenData **> qualIdent) <**> 
+        (tokenData **> qualIdent) <**> 
         yield Nothing <**>
         (map (flip Ident 0) <$> typeVariableList)
+
+--- A parser for a Hiding Class Declaration | hiding class [Context =>] QualIdent [KindExpr] TypeVariable
+hidingClassDecl :: Parser IDecl
+hidingClassDecl =
+    HidingClassDecl <$>
+        (tokenClass **> context) <**>
+        qualIdent <**>
+        optional kind <**>
+        (flip Ident 0 <$> typeVariable)
 
 --- A parser for a Data Declaration | data QualIdent [KindExpr] TypeVariableList = ConstrDeclList
 dataDecl :: Parser IDecl
@@ -118,15 +129,6 @@ functionDecl =
         optional methodPragma <**>
         arity <**>
         (tokenTyping **> qualTypeExpr)
-
---- A parser for a Hiding Class Declaration | hiding class [Context =>] QualIdent [KindExpr] TypeVariable
-hidingClassDecl :: Parser IDecl
-hidingClassDecl =
-    HidingClassDecl <$>
-        (tokenHiding **> tokenClass **> context) <**>
-        qualIdent <**>
-        optional kind <**>
-        (flip Ident 0 <$> typeVariable)
 
 --- A parser for a Class Declaration | class [Context =>] QualIdent [KindExpr] TypeVariable \{ MethodList \} [Pragma]
 classDecl :: Parser IDecl
@@ -289,7 +291,7 @@ qualTypeExpr = QualTypeExpr <$> context <**> typeExpr
 
 --- A parser for a Context | {Constraint | (ConstraintList)}
 context :: Parser Context
-context = choice [parseNoContext, contextList, parseSingleContext]
+context = choice [contextList, parseSingleContext, parseNoContext]
     where
     contextList :: Parser Context
     contextList = tokenParenL **> parseList tokenComma constraint <** tokenParenR <** tokenDoubleArrow
