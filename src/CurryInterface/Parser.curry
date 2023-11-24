@@ -164,24 +164,16 @@ precedence = parseInt
 arity :: Parser Arity
 arity = parseInt
 
---- CHANGE THIS (identList <**> ident)
 --- A parser for a Qualified Identifier | [IdentList .] {Ident | Operator | \( Operator \)}
 qualIdent :: Parser QualIdent
-qualIdent = convert <$> identList
+qualIdent = QualIdent <$> (optional (moduleIdent <* tokenDot)) <*> (flip Ident 0 <$> finalIdent)
     where
-        convert :: [String] -> QualIdent
-        convert (ids ++ [id]) =
-            let ids' = if null ids then Nothing else Just (ModuleIdent ids)
-                id' = Ident id 0
-            in QualIdent ids' id'
+    finalIdent :: Parser String
+    finalIdent = (tokenParenL *> operator <* tokenParenR <|> operator <|> ident)
 
 --- A parser for a List of Identifiers | Ident [. IdentList]
 identList :: Parser [String]
-identList =
-    toList <$> parenthesize operator <|>
-    toList <$> operator <|>
-    toList <$> ident <|>
-    (++) <$> some (ident <* tokenDot) <*> (toList <$> ident <|> toList <$> parenthesize operator)
+identList = parseList tokenDot ident
 
 --- A parser for an Identifier (not operator)
 ident :: Parser String
