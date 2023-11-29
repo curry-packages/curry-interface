@@ -263,13 +263,38 @@ methodPragma = parseSinglePragma tokenPragmaMethod
 modulePragma :: Parser ModuleIdent
 modulePragma = tokenPragmaL **> tokenPragmaModule **> moduleIdent <** tokenPragmaR
 
---- A parser for a Constructor Declaration
-constrDecl :: Parser ConstrDecl
-constrDecl = choice
-    [ constrDeclOp
-    , constrDeclRecord
-    , constrDeclSimple]
+--case1 :: Ident -> Parser ConstrDecl
+--case1 i = RecordDecl i <$> (skipWhitespace *> tokenCurlyBracketL **> parseList tokenComma fieldDecl <** tokenCurlyBracketR)
 
+--case2 :: Ident -> Parser ConstrDecl
+--case2 i = ConstrDecl i <$> many (skipWhitespace *> typeExpr)
+
+--- A parser for a Constructor Declaration
+-- Constr ::= Ident TypeVariableList
+--          | Ident '{' fieldList '}'
+--          | TypeExpr Op TypeExpr
+constrDecl :: Parser ConstrDecl
+constrDecl = (flip Ident 0 <$> ident *>= decide1) <|> constrDeclOp
+    where
+    decide1 :: Ident -> Parser ConstrDecl
+    decide1 i = case1 i <|> case2 i
+
+    case1 :: Ident -> Parser ConstrDecl
+    case1 i = RecordDecl i <$> (skipWhitespace *> tokenCurlyBracketL **> parseList tokenComma fieldDecl <** tokenCurlyBracketR)
+
+    case2 :: Ident -> Parser ConstrDecl
+    case2 i = many (skipWhitespace *> typeExpr) *>= decide2 i
+
+    decide2 :: Ident -> [TypeExpr] -> Parser ConstrDecl
+    decide2 i ts =
+        (ConOpDecl (foldl1 ApplyType (ConstructorType (identToQualIdent i):ts)) <$> (flip Ident 0 <$> operator) <**> typeExpr) <|>
+        yield (ConstrDecl i ts)
+{-
+constrDecl = choice
+    [ constrDeclRecord 
+    , constrDeclOp
+    , constrDeclSimple]
+-}
 --- A parser for a simple Constructor Declaration | Ident TypeExprList
 constrDeclSimple :: Parser ConstrDecl
 constrDeclSimple =
@@ -307,7 +332,7 @@ typeExpr = type0
 
     -- type2 ::= identType | parenType | bracketType
     type2 :: Parser TypeExpr
-    type2 = identType <|> parenType <|> bracketType
+    type2 = parenType <|> bracketType <|> identType
 
     identType :: Parser TypeExpr
     identType = variableType <|> constructorType
@@ -424,6 +449,9 @@ methodImpl =
 --- Converts a value into a Singleton List
 toList :: a -> [a]
 toList x = [x]
+
+identToQualIdent :: Ident -> QualIdent
+identToQualIdent i = QualIdent Nothing i
 
 -- ################################################################
 
