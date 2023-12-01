@@ -28,9 +28,9 @@ parseCurryInterface txt = case parse interface txt of
 interface :: Parser Interface
 interface =
     Interface <$>
-        (tokenInterface **> moduleIdent) <**>
-        (tokenWhere **> tokenCurlyBracketL **> importDecls) <**>
-        (decls <** tokenCurlyBracketR)
+        (tokenInterface *!*> moduleIdent) <*!*>
+        (tokenWhere *!*> tokenCurlyBracketL *?*> importDecls) <*?*>
+        (decls <*?* tokenCurlyBracketR)
 
 --- A parser for a Module Identifier.
 moduleIdent :: Parser ModuleIdent
@@ -46,7 +46,7 @@ decls = many decl
 
 --- A parser for an Import Declaration.
 importDecl :: Parser IImportDecl
-importDecl = IImportDecl <$> (tokenImport **> moduleIdent <** tokenSemicolon)
+importDecl = IImportDecl <$> (tokenImport *!*> moduleIdent <* tokenSemicolon)
 
 --- A parser for a Declaration.
 decl :: Parser IDecl
@@ -63,26 +63,26 @@ decl = choice
 
 --- A parser for an Infix Declaration | Infix Arity Op
 infixDecl :: Parser IDecl
-infixDecl = IInfixDecl <$> iInfix <**> precedence <**> qualIdent
+infixDecl = IInfixDecl <$> iInfix <*!*> precedence <*!*> qualIdent
 
 hidingDecl :: Parser IDecl
-hidingDecl = tokenHiding **> (hidingDataDecl <|> hidingClassDecl)
+hidingDecl = tokenHiding *!*> (hidingDataDecl <|> hidingClassDecl)
 
 --- A parser for a Hiding Data Declaration | hiding data QualIdent [KindExpr] TypeVariableList
 hidingDataDecl :: Parser IDecl
 hidingDataDecl =
     HidingDataDecl <$>
-        (tokenData **> qualIdent) <**> 
-        yield Nothing <**>
+        (tokenData *!*> qualIdent) <*> 
+        optional (skipSomeWs *> kind) <*>
         (map (flip Ident 0) <$> typeVariableList)
 
 --- A parser for a Hiding Class Declaration | hiding class [Context =>] QualIdent [KindExpr] TypeVariable
 hidingClassDecl :: Parser IDecl
 hidingClassDecl =
-    convert HidingClassDecl <$> (tokenClass **> qualIdentWithContext *>= temp)
+    convert HidingClassDecl <$> (tokenClass *!*> qualIdentWithContext *>= temp)
     where
     temp :: Either Context (QualIdent, Maybe KindExpr, Ident) -> Parser (Context, QualIdent, Maybe KindExpr, Ident)
-    temp (Left ctx) = (,,,) ctx <$> qualIdent <**> optional kind <**> (flip Ident 0 <$> typeVariable)
+    temp (Left ctx) = (,,,) ctx <$> qualIdent <*!*> optional (kind <* skipSomeWs) <*> (flip Ident 0 <$> typeVariable)
     temp (Right (qi, mk, tv)) = yield ([], qi, mk, tv)
 
     convert :: (Context -> QualIdent -> Maybe KindExpr -> Ident -> a) -> (Context, QualIdent, Maybe KindExpr, Ident) -> a
@@ -99,28 +99,28 @@ hidingClassDecl =
 --- A parser for a Data Declaration | data QualIdent [KindExpr] TypeVariableList = ConstrDeclList
 dataDecl :: Parser IDecl
 dataDecl =
-    convert <$> leftSide <**> (tokenEqual **> rightSide) <**> pragma
+    convert <$> leftSide <*!*> (tokenEqual *!*> rightSide) <*?*> pragma
     where
     convert :: (QualIdent, Maybe KindExpr, [Ident]) -> [ConstrDecl] -> [Ident] -> IDecl
     convert (qi, mk, ids) cs ps = IDataDecl qi mk ids cs ps
 
     leftSide :: Parser (QualIdent, Maybe KindExpr, [Ident])
     leftSide =
-        (,,) <$> (tokenData **> qualIdent) <**> optional kind <**> (map (flip Ident 0) <$> typeVariableList)
+        (,,) <$> (tokenData *!*> qualIdent) <*> optional (skipSomeWs *> kind) <*> (map (flip Ident 0) <$> typeVariableList)
 
     rightSide :: Parser [ConstrDecl]
-    rightSide = (:) <$> constrDecl <**> many (tokenPipe **> constrDecl)
+    rightSide = (:) <$> constrDecl <*> many (skipSomeWs *> tokenPipe *!*> constrDecl)
 
 --- A parser for a Newtype Declaration | newtype QualIdent [KindExpr] TypeVariableList = Newtype
 newtypeDecl :: Parser IDecl
 newtypeDecl =
-    convert <$> leftSide <**> (tokenEqual **> rightSide) <**> pragma
+    convert <$> leftSide <*!*> (tokenEqual *!*> rightSide) <*?*> pragma
     where
     convert :: (QualIdent, Maybe KindExpr, [Ident]) -> NewConstrDecl -> [Ident] -> IDecl
     convert (qi, mk, ids) nc ps = INewtypeDecl qi mk ids nc ps
 
     leftSide :: Parser (QualIdent, Maybe KindExpr, [Ident])
-    leftSide = (,,) <$> (tokenNewtype **> qualIdent) <**> optional kind <**> (map (flip Ident 0) <$> typeVariableList)
+    leftSide = (,,) <$> (tokenNewtype *!*> qualIdent) <*> optional (skipSomeWs *> kind) <*> (map (flip Ident 0) <$> typeVariableList)
 
     rightSide :: Parser NewConstrDecl
     rightSide = iNewtype
@@ -128,13 +128,13 @@ newtypeDecl =
 --- A parser for a Type Declaration | type QualIdent [KindExpr] TypeVariableList = TypeExpr
 typeDecl :: Parser IDecl
 typeDecl =
-    convert <$> leftSide <**> (tokenEqual **> rightSide)
+    convert <$> leftSide <*!*> (tokenEqual *!*> rightSide)
     where
     convert :: (QualIdent, Maybe KindExpr, [Ident]) -> TypeExpr -> IDecl
     convert (qi, mk, ids) t = ITypeDecl qi mk ids t
 
     leftSide :: Parser (QualIdent, Maybe KindExpr, [Ident])
-    leftSide = (,,) <$> (tokenType **> qualIdent) <**> optional kind <**> (map (flip Ident 0) <$> typeVariableList)
+    leftSide = (,,) <$> (tokenType *!*> qualIdent) <*> optional (skipSomeWs *> kind) <*> (map (flip Ident 0) <$> typeVariableList)
 
     rightSide :: Parser TypeExpr
     rightSide = typeExpr
@@ -143,17 +143,17 @@ typeDecl =
 functionDecl :: Parser IDecl
 functionDecl =
     IFunctionDecl <$>
-        qualIdent <**>
-        optional methodPragma <**>
-        arity <**>
-        (tokenTyping **> qualTypeExpr)
+        qualIdent <*!*>
+        optional (skipSomeWs *> methodPragma) <*>
+        arity <*!*>
+        (tokenTyping *!*> qualTypeExpr)
 
 --- A parser for a Class Declaration | class [Context =>] QualIdent [KindExpr] TypeVariable \{ MethodList \} [Pragma]
 classDecl :: Parser IDecl
 classDecl =
     convert IClassDecl <$>
-        (tokenClass **> qualIdentWithContext *>= temp) <**>
-        (tokenCurlyBracketL **> parseList tokenSemicolon methodDecl <** tokenCurlyBracketR) <**>
+        (tokenClass *!*> qualIdentWithContext *>= temp) <*!*>
+        (tokenCurlyBracketL *!*> parseList tokenSemicolon methodDecl <* tokenCurlyBracketR) <*>
         pragma
     where
     temp :: Either Context (QualIdent, Maybe KindExpr, Ident) -> Parser (Context, QualIdent, Maybe KindExpr, Ident)
@@ -177,8 +177,8 @@ classDecl =
 instanceDecl :: Parser IDecl
 instanceDecl =
     convert IInstanceDecl <$>
-        (tokenInstance **> (case1 <|> case2)) <**>
-        (tokenCurlyBracketL **> parseList tokenSemicolon methodImpl <** tokenCurlyBracketR) <**>
+        (tokenInstance *!*> (case1 <|> case2)) <*!*>
+        (tokenCurlyBracketL *!*> parseList tokenSemicolon methodImpl <* tokenCurlyBracketR) <*>
         optional modulePragma
     where
     case1 :: Parser (Context, QualIdent, InstanceType)
@@ -248,12 +248,12 @@ typeVariable = (:) <$> check isLower anyChar <*> many (check condition anyChar)
 
 --- A parser for a Type Variable List | TypeVariable [TypeVariableList]
 typeVariableList :: Parser [String]
-typeVariableList = many (skipWhitespace *> typeVariable)
+typeVariableList = many (skipSomeWs *> typeVariable)
 
 --- A parser for a Pragma | ADD SYNTAX DESCRIPTION
 pragma :: Parser [Ident]
 pragma =
-    (tokenPragmaL **> tokenPragma **> (map (flip Ident 0) <$> identList) <** tokenPragmaR) <|> yield []
+    (skipSomeWs *> tokenPragmaL **> tokenPragma **> (map (flip Ident 0) <$> identList) <** tokenPragmaR) <|> yield []
 
 --- A parser for a Method Pragma | ADD SYNTAX DESCRIPTION
 methodPragma :: Parser Ident
@@ -261,7 +261,7 @@ methodPragma = parseSinglePragma tokenPragmaMethod
 
 --- A parser for a Module Pragma | ADD SYNTAX DESCRIPTION
 modulePragma :: Parser ModuleIdent
-modulePragma = tokenPragmaL **> tokenPragmaModule **> moduleIdent <** tokenPragmaR
+modulePragma = skipSomeWs *> tokenPragmaL *!*> tokenPragmaModule *!*> moduleIdent <*!* tokenPragmaR
 
 --case1 :: Ident -> Parser ConstrDecl
 --case1 i = RecordDecl i <$> (skipWhitespace *> tokenCurlyBracketL **> parseList tokenComma fieldDecl <** tokenCurlyBracketR)
@@ -318,52 +318,95 @@ constrDeclRecord =
 --- A parser for a Type Expression
 typeExpr :: Parser TypeExpr
 typeExpr = type0
+
+-- type0 ::= type1 ['->' type0]
+type0 :: Parser TypeExpr
+type0 = convert <$> type1 <**> (optional (tokenArrow **> type0))
     where
-    -- type0 ::= type1 ['->' type0]
-    type0 :: Parser TypeExpr
-    type0 = convert <$> type1 <**> (optional (tokenArrow **> type0))
-        where
-        convert t1 Nothing   = t1
-        convert t1 (Just t0) = ArrowType t1 t0
-    
-    -- type1 ::= [type1] type2
-    type1 :: Parser TypeExpr
-    type1 = foldl1 ApplyType <$> some (skipWhitespace *> type2)
+    convert t1 Nothing   = t1
+    convert t1 (Just t0) = ArrowType t1 t0
 
-    -- type2 ::= identType | parenType | bracketType
-    type2 :: Parser TypeExpr
-    type2 = parenType <|> bracketType <|> identType
+-- type1 ::= [type1] type2
+type1 :: Parser TypeExpr
+type1 = foldl1 ApplyType <$> some (skipWhitespace *> type2)
 
-    identType :: Parser TypeExpr
-    identType = variableType <|> constructorType
+-- type2 ::= identType | parenType | bracketType
+type2 :: Parser TypeExpr
+type2 = parenType <|> bracketType <|> identType
 
-    variableType :: Parser TypeExpr
-    variableType = VariableType <$> (flip Ident 0 <$> typeVariable)
+identType :: Parser TypeExpr
+identType = variableType <|> constructorType
 
-    constructorType :: Parser TypeExpr
-    constructorType = ConstructorType <$> qualType
+variableType :: Parser TypeExpr
+variableType = VariableType <$> (flip Ident 0 <$> typeVariable)
 
-    -- parenType ::= '(' tupleType ')'
-    parenType :: Parser TypeExpr
-    parenType = tokenParenL **> tupleType <** tokenParenR
+constructorType :: Parser TypeExpr
+constructorType = ConstructorType <$> qualType
 
-    -- tupleType ::= type0
-    --            |  type0 ',' type0 { ',' type0 }
-    --            |  
-    tupleType :: Parser TypeExpr
-    tupleType = convert <$> ((:) <$> type0 <**> many (tokenComma **> type0) <|> yield [])
-        where
-        convert ts = case ts of
-            [t] -> t
-            _   -> TupleType ts
+-- parenType ::= '(' tupleType ')'
+parenType :: Parser TypeExpr
+parenType = tokenParenL **> tupleType <** tokenParenR
 
-    -- bracketType ::= '[' type0 ']'
-    bracketType :: Parser TypeExpr
-    bracketType = ListType <$> (toList <$> (tokenBracketL **> type0 <** tokenBracketR))
+-- tupleType ::= type0
+--            |  type0 ',' type0 { ',' type0 }
+--            |  
+tupleType :: Parser TypeExpr
+tupleType = convert <$> ((:) <$> type0 <**> many (tokenComma **> type0) <|> yield [])
+    where
+    convert ts = case ts of
+        [t] -> t
+        _   -> TupleType ts
 
+-- bracketType ::= '[' type0 ']'
+bracketType :: Parser TypeExpr
+bracketType = ListType <$> (toList <$> (tokenBracketL **> type0 <** tokenBracketR))
+
+--                   Prelude.Int -> Prelude.Int -> Prelude.Int;
+-- Prelude.Show a => a           -> [Prelude.Char]            ;
 --- A parser for a Qualified Type Expression | [Context =>] type0
 qualTypeExpr :: Parser QualTypeExpr
-qualTypeExpr = QualTypeExpr <$> context <**> typeExpr
+qualTypeExpr = (QualTypeExpr <$> contextList <*!*> typeExpr) <|> (qualType *>= decide1) <|> (QualTypeExpr [] <$> typeExpr)
+    where
+    decide1 :: QualIdent -> Parser QualTypeExpr
+    decide1 qi = case1 qi <|> case2 qi
+
+    -- QualTypeExpr TypeVariable ... (maybe context)
+    case1 :: QualIdent -> Parser QualTypeExpr
+    case1 qi = skipSomeWs *> (flip Ident 0 <$> typeVariable) *>= decide2 qi
+
+    -- QualTypeExpr ... (NOT context)
+    case2 :: QualIdent -> Parser QualTypeExpr
+    case2 qi = QualTypeExpr [] <$> arrowOrApply (ConstructorType qi)
+
+    -- QualTypeExpr TypeVariable ... (maybe context)
+    decide2 :: QualIdent -> Ident -> Parser QualTypeExpr
+    decide2 qi i = case3 qi i <|> case4 qi i
+
+    -- QualTypeExpr TypeVariable '=>' ... (context)
+    case3 :: QualIdent -> Ident -> Parser QualTypeExpr
+    case3 qi i = QualTypeExpr [Constraint qi (VariableType i)] <$> (skipSomeWs *> tokenDoubleArrow *!*> typeExpr)
+
+    -- QualTypeExpr TypeVariable ... (no context)
+    case4 :: QualIdent -> Ident -> Parser QualTypeExpr
+    case4 qi i = QualTypeExpr [] <$> arrowOrApply (ApplyType (ConstructorType qi) (VariableType i))
+
+    arrowOrApply :: TypeExpr -> Parser TypeExpr
+    arrowOrApply t = (ArrowType t <$> (skipSomeWs *> tokenArrow *!*> type0)) <|> (foldl1 ApplyType <$> ((t:) <$> many (skipSomeWs *> type2)))
+{-
+qualTypeExpr = ((,) <$> qualType <**> typeExpr *>= decide) <|> (QualTypeExpr <$> contextList <**> typeExpr)
+    where
+    decide :: (QualIdent, TypeExpr) -> Parser QualTypeExpr
+    decide (qi, t) = case1 qi t <|> case2 qi t
+    
+    case1 :: QualIdent -> TypeExpr -> Parser QualTypeExpr
+    case1 qi t = QualTypeExpr [Constraint qi t] <$> (skipWhitespace *> tokenDoubleArrow **> typeExpr)
+
+    case2 :: QualIdent -> TypeExpr -> Parser QualTypeExpr
+    case2 qi t = yield $ QualTypeExpr [] (ApplyType (ConstructorType qi) t)
+-}
+--qualTypeExpr = QualTypeExpr <$> context <**> typeExpr
+
+--- SAME ERROR AS BEFORE: CONTEXT AND TYPEEXPR CAN BOTH START WITH QUALIDENT
 
 --- A parser for a Context | {Constraint | (ConstraintList)}
 context :: Parser Context
@@ -430,9 +473,9 @@ newtypeRecord =
 methodDecl :: Parser IMethodDecl
 methodDecl =
     IMethodDecl <$>
-        (flip Ident 0 <$> ident) <**>
-        optional arity <**>
-        (tokenTyping **> qualTypeExpr)
+        (flip Ident 0 <$> ident) <*!*>
+        optional (arity <* skipSomeWs) <*>
+        (tokenTyping *!*> qualTypeExpr)
 
 --- A parser for an Instance Type
 instanceType :: Parser InstanceType
@@ -461,12 +504,12 @@ contextList :: Parser Context
 contextList = tokenParenL **> parseList tokenComma constraint <** tokenParenR <** tokenDoubleArrow
 
 qualIdentWithContext :: Parser (Either Context (QualIdent, Maybe KindExpr, Ident))
-qualIdentWithContext = (Left <$> contextList) <|> ((,,) <$> qualIdent <**> optional kind <**> (flip Ident 0 <$> typeVariable) *>= decide)
+qualIdentWithContext = (Left <$> contextList <* skipSomeWs) <|> ((,,) <$> qualIdent <*> optional (skipSomeWs *> kind) <*> (flip Ident 0 <$> (skipSomeWs *> typeVariable)) *>= decide)
     where 
     decide :: (QualIdent, Maybe KindExpr, Ident) -> Parser (Either Context (QualIdent, Maybe KindExpr, Ident))
     decide (qi, mk, tv) = case mk of
         Just _ -> yield (Right (qi, mk, tv))
-        Nothing -> (tokenDoubleArrow **> yield (Left [Constraint qi (VariableType tv)])) <|> yield (Right (qi, mk, tv))
+        Nothing -> (skipSomeWs *> tokenDoubleArrow *!*> yield (Left [Constraint qi (VariableType tv)])) <|> yield (Right (qi, mk, tv))
 
 --- Parses a string with enclosing parantheses
 parenthesize :: Parser String -> Parser String
@@ -519,8 +562,37 @@ pa **> pb = pa *> skipWhitespace *> pb <* skipWhitespace
 (<**) :: Parser a -> Parser b -> Parser a
 pa <** pb = pa <* skipWhitespace <* pb <* skipWhitespace
 
+infixl 4 <*?*>, <*?*, *?*>, <*!*>, <*!*, *!*>
+
+(<*?*>) :: Parser (a -> b) -> Parser a -> Parser b
+pa <*?*> pb = (pa <* skipManyWs) <*> pb
+
+(<*?*) :: Parser a -> Parser b -> Parser a
+pa <*?* pb = const <$> pa <*?*> pb
+
+(*?*>) :: Parser a -> Parser b -> Parser b
+pa *?*> pb = flip const <$> pa <*?*> pb
+
+(<*!*>) :: Parser (a -> b) -> Parser a -> Parser b
+pa <*!*> pb = (pa <* skipSomeWs) <*> pb
+
+(<*!*) :: Parser a -> Parser b -> Parser a
+pa <*!* pb = const <$> pa <*!*> pb
+
+(*!*>) :: Parser a -> Parser b -> Parser b
+pa *!*> pb = flip const <$> pa <*!*> pb
+
+ws :: Parser ()
+ws = check isSpace anyChar *> empty
+
+skipManyWs :: Parser ()
+skipManyWs = many ws *> empty
+
+skipSomeWs :: Parser ()
+skipSomeWs = some ws *> empty
+
 skipWhitespace :: Parser ()
-skipWhitespace = many (check isSpace anyChar) *> empty
+skipWhitespace = skipManyWs
 
 -- ################################################################
 
