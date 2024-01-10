@@ -2,13 +2,6 @@
 --- This library defines a parser for Curry interfaces.
 ------------------------------------------------------------------------------
 
-{-
-EDIT CONTEXT PARSER IN CONTEXT WITH OTHER PARSERS
-Currently parsing a context followed by something starting with QualIdent takees
-an extreme amount of time, slowing down the whole parsing process.
-As there are a lot of such situations, this is a BOTTLENECK.
--}
-
 module CurryInterface.Parser where
 
 import CurryInterface.Types
