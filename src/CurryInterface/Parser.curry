@@ -192,7 +192,7 @@ qualIdent = QualIdent <$> (optional (moduleIdent <* tokenDot)) <*> (Ident <$> fi
 
 --- A parser for a List of Identifiers | Ident [. IdentList]
 identList :: Parser [String]
-identList = parseList tokenDot ident
+identList = (:) <$> ident <*> (many (tokenDot *> ident)) <|> yield []
 
 --- A parser for an Identifier (not operator)
 ident :: Parser String
