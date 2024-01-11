@@ -67,6 +67,7 @@ data KindExpr
 -- Token types
 
 -- |Simple identifier
+{-
 data Ident = Ident 
   { idName :: String
   , idUnique :: Int
@@ -77,6 +78,17 @@ instance Eq Ident where
 
 instance Ord Ident where
   Ident m i `compare` Ident n j = (m, i) `compare` (n, j)
+-}
+
+data Ident = Ident
+  { idName :: String
+  } deriving (Read, Show)
+
+instance Eq Ident where
+  Ident m == Ident n = m == n
+
+instance Ord Ident where
+  Ident m `compare` Ident n = m `compare` n
 
 -- | Module identifier
 data ModuleIdent = ModuleIdent 
