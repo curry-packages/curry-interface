@@ -67,18 +67,17 @@ hidingDecl = tokenHiding *!*> (hidingDataDecl <|> hidingClassDecl)
 --- A parser for a Hiding Data Declaration | hiding data QualIdent [KindExpr] TypeVariableList
 hidingDataDecl :: Parser IDecl
 hidingDataDecl =
-    HidingDataDecl <$>
-        (tokenData *!*> qualIdent) <*> 
-        optional (skipSomeWs *> kind) <*>
-        (map Ident <$> typeVariableList)
+    (tokenData *!*> withOptionalKind HidingDataDecl qualIdent) <*>
+    (map Ident <$> typeVariableList)
 
 --- A parser for a Hiding Class Declaration | hiding class [Context =>] QualIdent [KindExpr] TypeVariable
 hidingClassDecl :: Parser IDecl
-hidingClassDecl =
+hidingClassDecl = --trace "change hidingClassDecl like classDecl"
     convert HidingClassDecl <$> (tokenClass *!*> qualIdentWithContext *>= temp)
     where
     temp :: Either Context (QualIdent, Maybe KindExpr, Ident) -> Parser (Context, QualIdent, Maybe KindExpr, Ident)
-    temp (Left ctx) = (,,,) ctx <$> qualIdent <*!*> optional (kind <* skipSomeWs) <*> (Ident <$> typeVariable)
+    --temp (Left ctx) = (,,,) ctx <$> qualIdent <*!*> optional (kind <* skipSomeWs) <*> (Ident <$> typeVariable)
+    temp (Left ctx) = withOptionalKind ((,,,) ctx) qualIdent <*!*> (Ident <$> typeVariable)
     temp (Right (qi, mk, tv)) = yield ([], qi, mk, tv)
 
     convert :: (Context -> QualIdent -> Maybe KindExpr -> Ident -> a) -> (Context, QualIdent, Maybe KindExpr, Ident) -> a
@@ -87,6 +86,12 @@ hidingClassDecl =
 --- A parser for a Data Declaration | data QualIdent [KindExpr] TypeVariableList = ConstrDeclList
 dataDecl :: Parser IDecl
 dataDecl =
+    tokenData *!*> withOptionalKind IDataDecl qualIdent <*>
+    (map Ident <$> typeVariableList) <*>
+    ((skipSomeWs *> tokenEqual *!*> parseList (skipSomeWs *> tokenPipe) constrDecl) <|> yield []) <*?*>
+    pragma
+
+    {-
     convert <$> leftSide <*!*> (tokenEqual *!*> rightSide) <*?*> pragma
     where
     convert :: (QualIdent, Maybe KindExpr, [Ident]) -> [ConstrDecl] -> [Ident] -> IDecl
@@ -98,10 +103,17 @@ dataDecl =
 
     rightSide :: Parser [ConstrDecl]
     rightSide = (:) <$> constrDecl <*> many (skipSomeWs *> tokenPipe *!*> constrDecl)
+    -}
 
 --- A parser for a Newtype Declaration | newtype QualIdent [KindExpr] TypeVariableList = Newtype
 newtypeDecl :: Parser IDecl
 newtypeDecl =
+    tokenNewtype *!*> withOptionalKind INewtypeDecl qualIdent <*>
+    (map Ident <$> typeVariableList) <*!*>
+    (tokenEqual *!*> iNewtype) <*?*>
+    pragma
+
+    {-
     convert <$> leftSide <*!*> (tokenEqual *!*> rightSide) <*?*> pragma
     where
     convert :: (QualIdent, Maybe KindExpr, [Ident]) -> NewConstrDecl -> [Ident] -> IDecl
@@ -112,10 +124,16 @@ newtypeDecl =
 
     rightSide :: Parser NewConstrDecl
     rightSide = iNewtype
+    -}
 
 --- A parser for a Type Declaration | type QualIdent [KindExpr] TypeVariableList = TypeExpr
 typeDecl :: Parser IDecl
 typeDecl =
+    tokenType *!*> withOptionalKind ITypeDecl qualIdent <*>
+    (map Ident <$> typeVariableList) <*!*>
+    (tokenEqual *!*> typeExpr)
+
+    {-
     convert <$> leftSide <*!*> (tokenEqual *!*> rightSide)
     where
     convert :: (QualIdent, Maybe KindExpr, [Ident]) -> TypeExpr -> IDecl
@@ -126,6 +144,7 @@ typeDecl =
 
     rightSide :: Parser TypeExpr
     rightSide = typeExpr
+    -}
 
 --- A parser for a Function Declaration | QualIdent [MethodPragma] Arity :: QualTypeExpr
 functionDecl :: Parser IDecl
@@ -136,7 +155,9 @@ functionDecl =
         arity <*!*>
         (tokenTyping *!*> qualTypeExpr)
 
+--- ADD OVERLAYED CASE OF KINDEXPRESSION
 --- A parser for a Class Declaration | class [Context =>] QualIdent [KindExpr] TypeVariable \{ MethodList \} [Pragma]
+{-
 classDecl :: Parser IDecl
 classDecl =
     convert IClassDecl <$>
@@ -146,10 +167,32 @@ classDecl =
     where
     temp :: Either Context (QualIdent, Maybe KindExpr, Ident) -> Parser (Context, QualIdent, Maybe KindExpr, Ident)
     temp (Left ctx) = (,,,) ctx <$> qualIdent <*> optional (skipSomeWs *> kind) <*!*> (Ident <$> typeVariable)
+    --temp (Left ctx) = withOptionalKind ((,,,) ctx) qualIdent <*!*> (Ident <$> typeVariable)
     temp (Right (qi, mk, tv)) = yield ([], qi, mk, tv)
 
     convert :: (Context -> QualIdent -> Maybe KindExpr -> Ident -> a) -> (Context, QualIdent, Maybe KindExpr, Ident) -> a
     convert f (ctx, qi, mk, tv) = f ctx qi mk tv
+-}
+--IClassDecl      Context QualIdent (Maybe KindExpr) Ident [IMethodDecl] [Ident]
+classDecl :: Parser IDecl
+classDecl = tokenClass *!*> (case1 <|> case2) <*!*> (tokenCurlyBracketL *!*> parseList tokenSemicolon methodDecl <*?* tokenCurlyBracketR) <*> pragma
+    where
+    case1 :: Parser ([IMethodDecl] -> [Ident] -> IDecl)
+    case1 = (tokenParenL *> qualIdent <* skipSomeWs) *>= f
+    case2 :: Parser ([IMethodDecl] -> [Ident] -> IDecl)
+    case2 = (qualIdent <* skipSomeWs) *>= g
+    f :: QualIdent -> Parser ([IMethodDecl] -> [Ident] -> IDecl)
+    f qi =
+        (IClassDecl [] qi <$> (Just <$> (tokenTyping *!*> kind <* tokenParenR)) <*!*> (Ident <$> typeVariable)) <|>
+        ((IClassDecl <$> (((:) <$> (Constraint qi <$> typeExpr) <*> (tokenComma *!*> parseList tokenComma constraint)) <* tokenParenR <*!* tokenDoubleArrow <* skipSomeWs) *>=
+            (flip withOptionalKind qualIdent)) <*!*> ((Ident <$> typeVariable)))
+    g :: QualIdent -> Parser ([IMethodDecl] -> [Ident] -> IDecl)
+    g qi =
+        (ident) *>= h qi
+    h :: QualIdent -> String -> Parser ([IMethodDecl] -> [Ident] -> IDecl)
+    h qi i =
+        (((yield (IClassDecl [Constraint qi (VariableType (Ident i))]) <*!* tokenDoubleArrow <* skipSomeWs) *>= (flip withOptionalKind qualIdent)) <*!*> (Ident <$> ident)) <|>
+        (yield (IClassDecl [] qi Nothing (Ident i)))
 
 --- A parser for an Instance Declaration | instance [Context =>] QualIdent InstanceType \{ MethodImplList \} [ModulePragma]
 instanceDecl :: Parser IDecl
@@ -202,7 +245,7 @@ ident = (:) <$> check isAlpha anyChar <*> many (check condition anyChar)
 
 --- A parser for an Operator
 operator :: Parser String
-operator = check stringCondition (some (check charCondition anyChar))
+operator = check stringCondition (some (check charCondition anyChar)) <|> tokenBacktick *> ident <* tokenBacktick
     where
     charCondition c = elem c allowed
     stringCondition s = not (elem s exceptions)
@@ -382,7 +425,16 @@ fieldDecl =
 
 --- A parser for a Kind Expression | NOT YET IMPLEMENTED
 kind :: Parser KindExpr
-kind = failure
+kind = kind0
+
+kind0 :: Parser KindExpr
+kind0 = convert <$> kind1 <*> (optional (skipSomeWs *> tokenArrow *!*> kind0))
+    where
+    convert k1 Nothing   = k1
+    convert k1 (Just k0) = ArrowKind k1 k0
+
+kind1 :: Parser KindExpr
+kind1 = tokenStar *> yield Star <|> tokenParenL *> kind0 <* tokenParenR
 
 --- A parser for a Newtype
 iNewtype :: Parser NewConstrDecl
@@ -416,7 +468,7 @@ newtypeRecord =
 methodDecl :: Parser IMethodDecl
 methodDecl =
     IMethodDecl <$>
-        (Ident <$> ident) <*!*>
+        (Ident <$> (ident <|> (tokenParenL *> operator <* tokenParenR))) <*!*>
         optional (arity <* skipSomeWs) <*>
         (tokenTyping *!*> qualTypeExpr)
 
@@ -489,6 +541,15 @@ parseConstructor =
     (,) <$>
         (Ident <$> ident) <*>
         many (skipSomeWs *> typeExpr)
+
+withOptionalKind :: (a -> Maybe KindExpr -> b) -> Parser a -> Parser b
+withOptionalKind c p = withKind <|> withoutKind
+    where
+    withKind =
+        c <$> (tokenParenL *> p) <*!*> (tokenTyping *!*> (Just <$> kind) <* tokenParenR)
+    
+    withoutKind = c <$> p <*> yield Nothing
+    
 
 --- Debug function to fail with an error message of which function is not yet implemented.
 missing :: String -> Parser a
@@ -627,3 +688,9 @@ tokenNewtype = word "newtype"
 
 tokenType :: Parser ()
 tokenType = word "type"
+
+tokenBacktick :: Parser ()
+tokenBacktick = char '`'
+
+tokenStar :: Parser ()
+tokenStar = char '*'
