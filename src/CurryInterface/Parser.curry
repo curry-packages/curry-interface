@@ -209,7 +209,9 @@ instanceDecl =
     case2 = ((,) <$> qualIdent <*!*> instanceType) *>= decide
 
     decide :: (QualIdent, InstanceType) -> Parser (Context, QualIdent, InstanceType)
-    decide (qi, it) = (skipSomeWs *> tokenDoubleArrow *!*> ((,,) [Constraint qi it] <$> qualIdent <*!*> instanceType)) <|> yield ([], qi, it)
+    decide (qi, it) =
+        (skipSomeWs *> tokenDoubleArrow *!*> ((,,) [Constraint qi it] <$> qualIdent <*!*> instanceType)) <|>
+        yield ([], qi, it)
 
     convert :: (Context -> QualIdent -> InstanceType -> a) -> (Context, QualIdent, InstanceType) -> a
     convert f (ctx, qi, it) = f ctx qi it
@@ -231,7 +233,7 @@ qualIdent :: Parser QualIdent
 qualIdent = QualIdent <$> (optional (moduleIdent <* tokenDot)) <*> (Ident <$> finalIdent)
     where
     finalIdent :: Parser String
-    finalIdent = (tokenParenL *> operator <* tokenParenR <|> operator <|> ident)
+    finalIdent = tokenParenL *> operator <* tokenParenR <|> operator <|> ident
 
 --- A parser for a List of Identifiers | Ident [. IdentList]
 identList :: Parser [String]
@@ -360,7 +362,7 @@ tupleType = convert <$> parseList tokenComma type0
 
 -- bracketType ::= '[' type0 ']'
 bracketType :: Parser TypeExpr
-bracketType = ListType <$> (toList <$> (tokenBracketL *> type0 <* tokenBracketR))
+bracketType = ListType <$> ((toList <$> (tokenBracketL *> type0 <* tokenBracketR)) <|> (word "[]" *> yield []))
 
 --                   Prelude.Int -> Prelude.Int -> Prelude.Int;
 -- Prelude.Show a => a           -> [Prelude.Char]            ;
