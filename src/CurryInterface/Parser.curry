@@ -241,7 +241,7 @@ identList = (:) <$> ident <*> (many (tokenDot *> ident)) <|> yield []
 ident :: Parser String
 ident = (:) <$> check isAlpha anyChar <*> many (check condition anyChar)
     where
-    condition c = isDigit c || isAlpha c
+    condition c = isDigit c || isAlpha c || c == '_' || c == '\''
 
 --- A parser for an Operator
 operator :: Parser String
