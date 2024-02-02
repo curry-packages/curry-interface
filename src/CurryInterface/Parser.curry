@@ -72,16 +72,24 @@ hidingDataDecl =
 
 --- A parser for a Hiding Class Declaration | hiding class [Context =>] QualIdent [KindExpr] TypeVariable
 hidingClassDecl :: Parser IDecl
-hidingClassDecl = --trace "change hidingClassDecl like classDecl"
-    convert HidingClassDecl <$> (tokenClass *!*> qualIdentWithContext *>= temp)
+hidingClassDecl = tokenClass *!*> (case1 <|> case2)
     where
-    temp :: Either Context (QualIdent, Maybe KindExpr, Ident) -> Parser (Context, QualIdent, Maybe KindExpr, Ident)
-    --temp (Left ctx) = (,,,) ctx <$> qualIdent <*!*> optional (kind <* skipSomeWs) <*> (Ident <$> typeVariable)
-    temp (Left ctx) = withOptionalKind ((,,,) ctx) qualIdent <*!*> (Ident <$> typeVariable)
-    temp (Right (qi, mk, tv)) = yield ([], qi, mk, tv)
-
-    convert :: (Context -> QualIdent -> Maybe KindExpr -> Ident -> a) -> (Context, QualIdent, Maybe KindExpr, Ident) -> a
-    convert f (ctx, qi, mk, tv) = f ctx qi mk tv
+    case1 :: Parser IDecl
+    case1 = (tokenParenL *> qualIdent <* skipSomeWs) *>= f
+    case2 :: Parser IDecl
+    case2 = (qualIdent <* skipSomeWs) *>= g
+    f :: QualIdent -> Parser IDecl
+    f qi =
+        (HidingClassDecl [] qi <$> (Just <$> (tokenTyping *!*> kind <* tokenParenR)) <*!*> (Ident <$> typeVariable)) <|>
+        ((HidingClassDecl <$> (((:) <$> (Constraint qi <$> typeExpr) <*> (tokenComma *!*> parseList tokenComma constraint)) <* tokenParenR <*!* tokenDoubleArrow <* skipSomeWs) *>=
+            (flip withOptionalKind qualIdent)) <*!*> ((Ident <$> typeVariable)))
+    g :: QualIdent -> Parser IDecl
+    g qi =
+        (ident) *>= h qi
+    h :: QualIdent -> String -> Parser IDecl
+    h qi i =
+        (((yield (HidingClassDecl [Constraint qi (VariableType (Ident i))]) <*!* tokenDoubleArrow <* skipSomeWs) *>= (flip withOptionalKind qualIdent)) <*!*> (Ident <$> ident)) <|>
+        (yield (HidingClassDecl [] qi Nothing (Ident i)))
 
 --- A parser for a Data Declaration | data QualIdent [KindExpr] TypeVariableList = ConstrDeclList
 dataDecl :: Parser IDecl
@@ -155,25 +163,7 @@ functionDecl =
         arity <*!*>
         (tokenTyping *!*> qualTypeExpr)
 
---- ADD OVERLAYED CASE OF KINDEXPRESSION
 --- A parser for a Class Declaration | class [Context =>] QualIdent [KindExpr] TypeVariable \{ MethodList \} [Pragma]
-{-
-classDecl :: Parser IDecl
-classDecl =
-    convert IClassDecl <$>
-        (tokenClass *!*> qualIdentWithContext *>= temp) <*!*>
-        (tokenCurlyBracketL *!*> parseList tokenSemicolon methodDecl <*?* tokenCurlyBracketR) <*>
-        pragma
-    where
-    temp :: Either Context (QualIdent, Maybe KindExpr, Ident) -> Parser (Context, QualIdent, Maybe KindExpr, Ident)
-    temp (Left ctx) = (,,,) ctx <$> qualIdent <*> optional (skipSomeWs *> kind) <*!*> (Ident <$> typeVariable)
-    --temp (Left ctx) = withOptionalKind ((,,,) ctx) qualIdent <*!*> (Ident <$> typeVariable)
-    temp (Right (qi, mk, tv)) = yield ([], qi, mk, tv)
-
-    convert :: (Context -> QualIdent -> Maybe KindExpr -> Ident -> a) -> (Context, QualIdent, Maybe KindExpr, Ident) -> a
-    convert f (ctx, qi, mk, tv) = f ctx qi mk tv
--}
---IClassDecl      Context QualIdent (Maybe KindExpr) Ident [IMethodDecl] [Ident]
 classDecl :: Parser IDecl
 classDecl = tokenClass *!*> (case1 <|> case2) <*!*> (tokenCurlyBracketL *!*> parseList tokenSemicolon methodDecl <*?* tokenCurlyBracketR) <*> pragma
     where
@@ -348,7 +338,10 @@ constructorType = ConstructorType <$> qualType
 
 -- parenType ::= '(' tupleType ')'
 parenType :: Parser TypeExpr
-parenType = tokenParenL *> tupleType <* tokenParenR
+parenType = tokenParenL *> (arrowType <|> tupleType) <* tokenParenR
+
+arrowType :: Parser TypeExpr
+arrowType = word "->" *> yield (ConstructorType (QualIdent Nothing (Ident"->")))
 
 -- tupleType ::= type0
 --            |  type0 ',' type0 { ',' type0 }
