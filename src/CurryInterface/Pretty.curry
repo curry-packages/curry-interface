@@ -37,7 +37,7 @@ prettyDecl options (ITypeDecl qualId mkind tvars texp) =
     string "type" <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariables options tvars <+>
     equals <+> prettyType options 0 texp
 prettyDecl options (IFunctionDecl qualId prag ari qualTExp) =
-    prettyQualIdent options 1 qualId <+> prettyMaybe (prettyPragma options) prag <+> prettyArity options ari <+> doubleColon <+> prettyQualType options qualTExp
+    prettyQualIdent options 1 qualId <> prettyMaybe (\x -> space <> prettyPragma options x) prag <+> prettyArity options ari <+> doubleColon <+> prettyQualType options qualTExp
 prettyDecl options (HidingClassDecl ctx qualId mkind id) =
     string "hiding class" <+> prettyContext options ctx <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariable options id
 prettyDecl options (IClassDecl ctx qualId mkind id mDecls pragmas) =
@@ -45,7 +45,7 @@ prettyDecl options (IClassDecl ctx qualId mkind id mDecls pragmas) =
     prettyMethodDecls options mDecls <+> prettyPragmas options pragmas
 prettyDecl options (IInstanceDecl ctx qualId itype mImpls mIdent) =
     string "instance" <+> prettyContext options ctx <+> prettyQualIdent options 0 qualId <+> prettyInstance options itype <+>
-    prettyImplementations options mImpls <+> prettyInstancePragma options mIdent
+    prettyImplementations options mImpls <> prettyMaybe (\x -> space <> prettyModulePragma options x) mIdent
 
 prettyArity :: Options -> Arity -> Doc
 prettyArity options = int
@@ -100,8 +100,8 @@ prettyField options (FieldDecl ids t) = (hcat . punctuate dot) (map (prettyIdent
 prettyFields :: Options -> [FieldDecl] -> Doc
 prettyFields options fields = lbrace <+> ((hcat . punctuate (string ", ")) (map (prettyField options) fields)) <+> rbrace
 
-prettyInstancePragma :: Options -> Maybe ModuleIdent -> Doc
-prettyInstancePragma options _ = string "INSTANCEPRAGMA"
+prettyModulePragma :: Options -> ModuleIdent -> Doc
+prettyModulePragma options mid = lpragma <+> string "MODULE" <+> prettyModuleIdent options mid <+> rpragma
 
 prettyPragma :: Options -> Ident -> Doc
 prettyPragma options prag = string "PRAGMA"
@@ -172,3 +172,9 @@ isOperator :: String -> Bool
 isOperator = all (flip elem allowed)
     where
     allowed = "!#$%&*+./<=>?@\\^|-~:"
+
+lpragma :: Doc
+lpragma = string "{-#"
+
+rpragma :: Doc
+rpragma = string "-#}"
