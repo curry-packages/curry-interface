@@ -97,7 +97,7 @@ dataDecl =
     tokenData *!*> withOptionalKind IDataDecl qualIdent <*>
     (map Ident <$> typeVariableList) <*>
     ((skipSomeWs *> tokenEqual *!*> parseList (skipSomeWs *> tokenPipe) constrDecl) <|> yield []) <*?*>
-    pragma
+    hiddenPragma
 
     {-
     convert <$> leftSide <*!*> (tokenEqual *!*> rightSide) <*?*> pragma
@@ -119,7 +119,7 @@ newtypeDecl =
     tokenNewtype *!*> withOptionalKind INewtypeDecl qualIdent <*>
     (map Ident <$> typeVariableList) <*!*>
     (tokenEqual *!*> iNewtype) <*?*>
-    pragma
+    hiddenPragma
 
     {-
     convert <$> leftSide <*!*> (tokenEqual *!*> rightSide) <*?*> pragma
@@ -165,7 +165,7 @@ functionDecl =
 
 --- A parser for a Class Declaration | class [Context =>] QualIdent [KindExpr] TypeVariable \{ MethodList \} [Pragma]
 classDecl :: Parser IDecl
-classDecl = tokenClass *!*> (case1 <|> case2) <*!*> (tokenCurlyBracketL *!*> parseList tokenSemicolon methodDecl <*?* tokenCurlyBracketR) <*> pragma
+classDecl = tokenClass *!*> (case1 <|> case2) <*!*> (tokenCurlyBracketL *!*> parseList tokenSemicolon methodDecl <*?* tokenCurlyBracketR) <*> hiddenPragma
     where
     case1 :: Parser ([IMethodDecl] -> [Ident] -> IDecl)
     case1 = (tokenParenL *> qualIdent <* skipSomeWs) *>= f
@@ -190,7 +190,7 @@ instanceDecl =
     convert IInstanceDecl <$>
         (tokenInstance *!*> (case1 <|> case2)) <*!*>
         (tokenCurlyBracketL *!*> parseList tokenSemicolon methodImpl <*!* tokenCurlyBracketR) <*>
-        (optional modulePragma)
+        (optional (skipSomeWs *> modulePragma))
     where
     case1 :: Parser (Context, QualIdent, InstanceType)
     case1 = (,,) <$> contextList <*!*> qualIdent <*!*> instanceType
@@ -254,18 +254,17 @@ typeVariable = (:) <$> check isLower anyChar <*> many (check condition anyChar)
 typeVariableList :: Parser [String]
 typeVariableList = many (skipSomeWs *> typeVariable)
 
---- A parser for a Pragma | ADD SYNTAX DESCRIPTION
-pragma :: Parser [Ident]
-pragma =
-    (skipSomeWs *> tokenPragmaL *!*> tokenPragma *!*> (map Ident <$> identList) <*!* tokenPragmaR) <|> yield []
+--- A parser for a Hidden Pragma | ADD SYNTAX DESCRIPTION
+hiddenPragma :: Parser [Ident]
+hiddenPragma = (tokenPragmaL *!*> word "HIDING" *!*> (map Ident <$> parseList tokenComma ident) <*!* tokenPragmaR) <|> yield []
 
 --- A parser for a Method Pragma | ADD SYNTAX DESCRIPTION
 methodPragma :: Parser Ident
-methodPragma = parseSinglePragma tokenPragmaMethod
+methodPragma = tokenPragmaL *!*> word "METHOD" *!*> (Ident <$> ident) <*!* tokenPragmaR
 
 --- A parser for a Module Pragma | ADD SYNTAX DESCRIPTION
 modulePragma :: Parser ModuleIdent
-modulePragma = skipSomeWs *> tokenPragmaL *!*> tokenPragmaModule *!*> moduleIdent <*!* tokenPragmaR
+modulePragma = tokenPragmaL *!*> word "MODULE" *!*> moduleIdent <*!* tokenPragmaR
 
 --- A parser for a Constructor Declaration
 -- Constr ::= Ident TypeVariableList

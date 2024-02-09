@@ -29,20 +29,20 @@ prettyDecl options (HidingDataDecl qualId mkind tvars) =
     string "hiding data" <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariables options tvars
 prettyDecl options (IDataDecl qualId mkind tvars constrs pragmas) =
     string "data" <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariables options tvars <$$>
-    (nest 2 . indent 2) equals <+> prettyConstructors options constrs <+> prettyPragmas options pragmas
+    (nest 2 . indent 2) equals <+> prettyConstructors options constrs <> prettyHiddenPragma options pragmas
 prettyDecl options (INewtypeDecl qualId mkind tvars newconstr pragmas) =
     string "newtype" <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariables options tvars <+> 
-    equals <+> prettyNewConstructor options newconstr <+> prettyPragmas options pragmas
+    equals <+> prettyNewConstructor options newconstr <> prettyHiddenPragma options pragmas
 prettyDecl options (ITypeDecl qualId mkind tvars texp) =
     string "type" <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariables options tvars <+>
     equals <+> prettyType options 0 texp
 prettyDecl options (IFunctionDecl qualId prag ari qualTExp) =
-    prettyQualIdent options 1 qualId <> prettyMaybe (\x -> space <> prettyPragma options x) prag <+> prettyArity options ari <+> doubleColon <+> prettyQualType options qualTExp
+    prettyQualIdent options 1 qualId <> prettyMaybe (\x -> space <> prettyMethodPragma options x) prag <+> prettyArity options ari <+> doubleColon <+> prettyQualType options qualTExp
 prettyDecl options (HidingClassDecl ctx qualId mkind id) =
     string "hiding class" <+> prettyContext options ctx <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariable options id
 prettyDecl options (IClassDecl ctx qualId mkind id mDecls pragmas) =
     string "class" <+> prettyContext options ctx <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariable options id <+>
-    prettyMethodDecls options mDecls <+> prettyPragmas options pragmas
+    prettyMethodDecls options mDecls <+> prettyHiddenPragma options pragmas
 prettyDecl options (IInstanceDecl ctx qualId itype mImpls mIdent) =
     string "instance" <+> prettyContext options ctx <+> prettyQualIdent options 0 qualId <+> prettyInstance options itype <+>
     prettyImplementations options mImpls <> prettyMaybe (\x -> space <> prettyModulePragma options x) mIdent
@@ -103,11 +103,13 @@ prettyFields options fields = lbrace <+> ((hcat . punctuate (string ", ")) (map 
 prettyModulePragma :: Options -> ModuleIdent -> Doc
 prettyModulePragma options mid = lpragma <+> string "MODULE" <+> prettyModuleIdent options mid <+> rpragma
 
-prettyPragma :: Options -> Ident -> Doc
-prettyPragma options prag = string "PRAGMA"
+prettyHiddenPragma :: Options -> [Ident] -> Doc
+prettyHiddenPragma options pragmas = case pragmas of
+    [] -> Text.Pretty.empty
+    _ -> space <> lpragma <+> string "HIDING" <+> (hsep . punctuate comma) (map (prettyIdent options 0) pragmas) <+> rpragma
 
-prettyPragmas :: Options -> [Ident] -> Doc
-prettyPragmas options prags = string "PRAGMAS"
+prettyMethodPragma :: Options -> Ident -> Doc
+prettyMethodPragma options id = lpragma <+> string "METHOD" <+> prettyIdent options 0 id <+> rpragma
 
 prettyType :: Options -> Int -> TypeExpr -> Doc
 prettyType options _ (ConstructorType qualId) = prettyQualIdent options 0 qualId
