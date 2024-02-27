@@ -4,10 +4,16 @@ import CurryInterface.Types
 
 import Text.Pretty
 
+--- Options to influence the pretty printing of Curry interfaces.
 data Options = Options
+  { optQualify    :: Bool -- print identifiers with module qualifier?
+  , optWithArity  :: Bool -- print arity of operations?
+  , optWithHiding :: Bool -- print `hiding` information?
+  }
 
+--- The default options for pretty printing: show everything
 defaultOptions :: Options
-defaultOptions = Options
+defaultOptions = Options True True True
 
 prettyInterface :: Options -> Interface -> Doc
 prettyInterface options (Interface mident decls1 decls2) =
