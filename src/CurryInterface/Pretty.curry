@@ -2,6 +2,7 @@ module CurryInterface.Pretty where
 
 import CurryInterface.Types
 
+import Prelude hiding (empty)
 import Text.Pretty
 
 --- Options to influence the pretty printing of Curry interfaces.
@@ -18,7 +19,10 @@ defaultOptions = Options True True True
 prettyInterface :: Options -> Interface -> Doc
 prettyInterface options (Interface mident decls1 decls2) =
     string "interface" <+> prettyModuleIdent options mident <+> string "where" <+>
-    lbrace <> linebreak <> ((vsep . punctuate semi) (map (prettyImportDecl options) decls1 ++ map (prettyDecl options) decls2)) <$$> rbrace
+    lbrace <> linebreak <> ((vsep . punctuate semi) (pdecls1 ++ pdecls2)) <$$> rbrace
+    where
+    pdecls1 = filter (not . isEmpty) (map (prettyImportDecl options) decls1)
+    pdecls2 = filter (not . isEmpty) (map (prettyDecl options) decls2)
 
 prettyModuleIdent :: Options -> ModuleIdent -> Doc
 prettyModuleIdent options (ModuleIdent ids) =
@@ -31,8 +35,9 @@ prettyImportDecl options (IImportDecl mident) =
 prettyDecl :: Options -> IDecl -> Doc
 prettyDecl options (IInfixDecl inf prec qualId) =
     prettyInfix options inf <+> prettyPrecedence options prec <+> prettyQualIdent options 0 qualId
-prettyDecl options (HidingDataDecl qualId mkind tvars) =
-    string "hiding data" <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariables options tvars
+prettyDecl options (HidingDataDecl qualId mkind tvars)
+    | optWithHiding options = string "hiding data" <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariables options tvars
+    | otherwise = empty
 prettyDecl options (IDataDecl qualId mkind tvars constrs pragmas) =
     string "data" <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariables options tvars <$$>
     (nest 2 . indent 2) equals <+> prettyConstructors options constrs <> prettyHiddenPragma options pragmas
@@ -43,9 +48,11 @@ prettyDecl options (ITypeDecl qualId mkind tvars texp) =
     string "type" <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariables options tvars <+>
     equals <+> prettyType options 0 texp
 prettyDecl options (IFunctionDecl qualId prag ari qualTExp) =
-    prettyQualIdent options 1 qualId <> prettyMaybe (\x -> space <> prettyMethodPragma options x) prag <+> prettyArity options ari <+> doubleColon <+> prettyQualType options qualTExp
-prettyDecl options (HidingClassDecl ctx qualId mkind id) =
-    string "hiding class" <+> prettyContext options ctx <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariable options id
+    prettyQualIdent options 1 qualId <> prettyMaybe (\x -> space <> prettyMethodPragma options x) prag <+>
+    (if optWithArity options then prettyArity options ari else empty) <+> doubleColon <+> prettyQualType options qualTExp
+prettyDecl options (HidingClassDecl ctx qualId mkind id)
+    | optWithHiding options = string "hiding class" <+> prettyContext options ctx <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariable options id
+    | otherwise = empty
 prettyDecl options (IClassDecl ctx qualId mkind id mDecls pragmas) =
     string "class" <+> prettyContext options ctx <+> prettyWithOptionalKind options qualId mkind <+> prettyTypeVariable options id <+>
     prettyMethodDecls options mDecls <+> prettyHiddenPragma options pragmas
@@ -73,8 +80,9 @@ prettyIdent options p (Ident id)
 
 prettyQualIdent :: Options -> Int -> QualIdent -> Doc
 prettyQualIdent options p (QualIdent Nothing id) = prettyIdent options p id
-prettyQualIdent options p (QualIdent (Just mident) id) =
-    prettyModuleIdent options mident <> dot <> prettyIdent options p id
+prettyQualIdent options p (QualIdent (Just mident) id)
+    | optQualify options = prettyModuleIdent options mident <> dot <> prettyIdent options p id
+    | otherwise = prettyIdent options p id
 
 prettyWithOptionalKind :: Options -> QualIdent -> Maybe KindExpr -> Doc
 prettyWithOptionalKind options qualId Nothing = prettyQualIdent options 0 qualId
@@ -145,7 +153,8 @@ prettyContext options ctx = case ctx of
 
 prettyMethodDecl :: Options -> IMethodDecl -> Doc
 prettyMethodDecl options (IMethodDecl id mari qualTExp) =
-    prettyIdent options 0 id <+> prettyMaybe (prettyArity options) mari <+> doubleColon <+> prettyQualType options qualTExp
+    prettyIdent options 0 id <+> 
+    (if optWithArity options then prettyMaybe (prettyArity options) mari else empty) <+> doubleColon <+> prettyQualType options qualTExp
 
 prettyMethodDecls :: Options -> [IMethodDecl] -> Doc
 prettyMethodDecls options mDecls = case mDecls of
@@ -156,7 +165,9 @@ prettyInstance :: Options -> InstanceType -> Doc
 prettyInstance options i = prettyType options 0 i
 
 prettyImplementation :: Options -> IMethodImpl -> Doc
-prettyImplementation options (id, ari) = prettyIdent options 0 id <+> prettyArity options ari
+prettyImplementation options (id, ari) =
+    prettyIdent options 0 id <+>
+    (if optWithArity options then prettyArity options ari else empty)
 
 prettyImplementations :: Options -> [IMethodImpl] -> Doc
 prettyImplementations options mImpls = case mImpls of
