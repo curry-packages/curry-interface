@@ -274,13 +274,16 @@ constrDecl :: Parser ConstrDecl
 constrDecl = (Ident <$> ident *>= decide1) <|> constrDeclOp
     where
     decide1 :: Ident -> Parser ConstrDecl
-    decide1 i = case1 i <|> case2 i
+    --decide1 i = case1 i <|> case2 i
+    decide1 i = (skipSomeWs *> (case1 i <!> case2 i)) <!> decide2 i []
 
     case1 :: Ident -> Parser ConstrDecl
-    case1 i = RecordDecl i <$> (skipSomeWs *> tokenCurlyBracketL *!*> parseList tokenComma fieldDecl <*!* tokenCurlyBracketR)
+    --case1 i = RecordDecl i <$> (skipSomeWs *> tokenCurlyBracketL *!*> parseList tokenComma fieldDecl <*!* tokenCurlyBracketR)
+    case1 i = RecordDecl i <$> (tokenCurlyBracketL *!*> parseList tokenComma fieldDecl <*!* tokenCurlyBracketR)
 
     case2 :: Ident -> Parser ConstrDecl
-    case2 i = many (skipSomeWs *> typeExpr) *>= decide2 i
+    --case2 i = many (skipSomeWs *> typeExpr) *>= decide2 i
+    case2 i = (:) <$> typeExpr <*> many (skipSomeWs *> typeExpr) *>= decide2 i
 
     decide2 :: Ident -> [TypeExpr] -> Parser ConstrDecl
     decide2 i ts =
@@ -361,7 +364,7 @@ bracketType = ListType <$> (tokenBracketL *> (toList <$> type0 <!> yield []) <* 
 -- Prelude.Show a => a           -> [Prelude.Char]            ;
 --- A parser for a Qualified Type Expression | [Context =>] type0
 qualTypeExpr :: Parser QualTypeExpr
-qualTypeExpr = singleOrNoConstraint <|> multipleOrNoConstraints
+qualTypeExpr = singleOrNoConstraint <!> multipleOrNoConstraints
     where
     singleOrNoConstraint :: Parser QualTypeExpr
     singleOrNoConstraint =
@@ -593,8 +596,20 @@ kind1 = tokenStar *> yield Star <!> tokenParenL *> kind0 <* tokenParenR
 
 --- A parser for a Newtype
 iNewtype :: Parser NewConstrDecl
-iNewtype = newtypeRecord <|> newtypeSimple
+--iNewtype = newtypeRecord <|> newtypeSimple
+iNewtype = (Ident <$> ident <* skipSomeWs) *>= decide1
+    where
+    decide1 :: Ident -> Parser NewConstrDecl
+    decide1 i =
+        (NewConstrDecl i <$> typeExpr) <!>
+        (NewRecordDecl i <$> (
+            tokenCurlyBracketL *!*> parseNewField <*!* tokenCurlyBracketR
+        ))
+    
+    parseNewField :: Parser (Ident, TypeExpr)
+    parseNewField = (,) <$> (Ident <$> ident) <*!*> (tokenTyping *!*> typeExpr)
 
+{-
 --- A parser for a simple Newtype | Ident TypeExpr
 newtypeSimple :: Parser NewConstrDecl
 newtypeSimple = 
@@ -618,6 +633,7 @@ newtypeRecord =
     where
     parseNewField :: Parser (Ident, TypeExpr)
     parseNewField = (,) <$> (Ident <$> ident) <*!*> (tokenTyping *!*> typeExpr)
+-}
 
 --- A parser for a Method Declaration | Ident [Arity] '::' QualTypeExpr
 methodDecl :: Parser IMethodDecl
@@ -654,7 +670,9 @@ contextList :: Parser Context
 contextList = tokenParenL *> parseList tokenComma constraint <* tokenParenR <*!* tokenDoubleArrow 
 
 qualIdentWithContext :: Parser (Either Context (QualIdent, Maybe KindExpr, Ident))
-qualIdentWithContext = (Left <$> contextList <* skipSomeWs) <|> ((,,) <$> qualIdent <*> optional (skipSomeWs *> kind) <*> (Ident <$> (skipSomeWs *> typeVariable)) *>= decide)
+qualIdentWithContext =
+    (Left <$> contextList <* skipSomeWs) <!>
+    ((,,) <$> qualIdent <*> optional (skipSomeWs *> kind) <*> (Ident <$> (skipSomeWs *> typeVariable)) *>= decide)
     where 
     decide :: (QualIdent, Maybe KindExpr, Ident) -> Parser (Either Context (QualIdent, Maybe KindExpr, Ident))
     decide (qi, mk, tv) = case mk of
