@@ -11,7 +11,7 @@ import Data.List (init, last)
 import DetParse
 
 --- FOR TESTING
---import System.IO.Unsafe (trace)
+-- import System.IO.Unsafe (trace)
 
 --- A parser for the text of a Curry interface.
 parseCurryInterface :: String -> Interface
@@ -360,38 +360,167 @@ bracketType = ListType <$> (tokenBracketL *> (toList <$> type0 <!> yield []) <* 
 --                   Prelude.Int -> Prelude.Int -> Prelude.Int;
 -- Prelude.Show a => a           -> [Prelude.Char]            ;
 --- A parser for a Qualified Type Expression | [Context =>] type0
-{-
 qualTypeExpr :: Parser QualTypeExpr
 qualTypeExpr = singleOrNoConstraint <|> multipleOrNoConstraints
     where
     singleOrNoConstraint :: Parser QualTypeExpr
-    singleOrNoConstraint = qualIdent *>= decide1
+    singleOrNoConstraint =
+        (qualIdent *>= decide1) <!>
+        (tokenBracketL *> (ListType <$> (toList <$> type0 <!> yield [])) <* tokenBracketR *>= decide8)
 
+    -- starts with QualIdent, not yet sure if one constraint or not
     decide1 :: QualIdent -> Parser QualTypeExpr
-    decide1 qi = (skipSomeWs *> tokenArrow *!*> type0 *>= decide2 qi) <|> (skipSomeWs *> type0 *>= decide3 qi) <|> (yield (QualTypeExpr [] constructorOrVariable qi))
+    decide1 qi = 
+        (skipSomeWs *>
+            (
+                (tokenArrow *!*> type0 *>= decide2 qi) <!>
+                (type0 *>= decide3 qi)
+            )
+        ) <!>
+        (yield (QualTypeExpr [] (constructorOrVariable qi)))
 
-    -- starts with no constraint but with ArrowType
+    -- starts with no constraints but with ArrowType
     decide2 :: QualIdent -> TypeExpr -> Parser QualTypeExpr
-    decide2 qi t = yield $ QualTypeExpr [] (ArrowType (constructorOrVariable qi) t)
+    decide2 qi t = 
+        yield $ QualTypeExpr [] (addPrefix (constructorOrVariable qi) t)
 
     -- starts with QualIdent and TypeExpr
     decide3 :: QualIdent -> TypeExpr -> Parser QualTypeExpr
-    decide3 qi t = let t' = ApplyType (constructorOrVariable qi) (case t of
-            ArrowType t1 t2 -> ArrowType (ApplyType (constructorOrVariable qi) t1) t2
-            ApplyType t1 t2 -> ApplyType (ApplyType (constructorOrVariable qi) t1) t2
-            _ -> ApplyType (constructorOrVariable qi) t)
-        in (QualTypeExpr [Constraint qi t] <$> (skipSomeWs *> tokenDoubleArrow *!*> type0)) <|> (yield (QualTypeExpr [] t'))
+    decide3 qi t = let t' = addPrefix (constructorOrVariable qi) t in
+        (QualTypeExpr [Constraint qi t] <$> (skipSomeWs *> tokenDoubleArrow *!*> type0)) <!>
+        (yield (QualTypeExpr [] t'))
 
+    multipleOrNoConstraints :: Parser QualTypeExpr
+    multipleOrNoConstraints =
+        tokenParenL *> (
+            (
+                tokenParenR *> (
+                    (skipSomeWs *> tokenArrow *!*> ((QualTypeExpr [] . ArrowType (TupleType [])) <$> type0)) <!>
+                    (yield (QualTypeExpr [] (TupleType [])))
+                )
+            ) <!>
+            (qualIdent *>= decide4) <!>
+            ((type0 <* tokenParenR) *>= decide8)
+        )
+    
+    -- starts with QualIdent, all cases still possible
+    decide4 :: QualIdent -> Parser QualTypeExpr
+    decide4 qi = 
+        (
+            skipSomeWs *> (
+                (type0 *>= decide5 qi) <!>
+                (tokenArrow *!*> type0 *>= decide6 qi)
+            )
+        ) <!>
+        (tokenComma *!*> decide7 qi)
+
+    -- starts with QualIdent and TypeExpr, all cases still possible
+    decide5 :: QualIdent -> TypeExpr -> Parser QualTypeExpr
+    decide5 qi t = let t' = addPrefix (constructorOrVariable qi) t in
+        --(tokenParenR *> decide8 t') <!>
+        case t of
+            ArrowType _ _ -> ((tokenParenR *> yield t') <!> (finishTupleType (tokenComma *> skipSomeWs) [t'])) *>= decide8
+            ApplyType _ _ -> finishTupleType (tokenComma *> skipSomeWs) [t'] *>= decide8
+            _ -> tokenComma *!*> decide9 [(qi, t)]
+
+    -- starts with no context, starts with an ArrowType or a TupleType starting with an ArrowType
+    decide6 :: QualIdent -> TypeExpr -> Parser QualTypeExpr
+    decide6 qi t = let t' = ArrowType (constructorOrVariable qi) t in
+        (tokenParenR *> decide8 t') <!>
+        (finishTupleType (tokenComma *> skipSomeWs) [t'] *>= decide8)
+
+    -- starts with no context, starts with tuple type, tuple starts with ConstructorType or VariableType
+    decide7 :: QualIdent -> Parser QualTypeExpr
+    decide7 qi = 
+        finishTupleType empty [constructorOrVariable qi] *>= decide8
+
+    -- starts with no context, first part of type expression parsed, rest remains to be parsed
+    decide8 :: TypeExpr -> Parser QualTypeExpr
+    decide8 t = 
+        (
+            skipSomeWs *> (
+                (type0 *>= (\t' -> yield (QualTypeExpr [] (ApplyType t t')))) <!>
+                (tokenArrow *!*> type0 *>= (\t' -> yield (QualTypeExpr [] (ArrowType t t'))))
+            )
+        ) <!>
+        (yield (QualTypeExpr [] t))
+
+    -- starts with a comma-seperated list, not yet clear if context or not
+    decide9 :: [(QualIdent, TypeExpr)] -> Parser QualTypeExpr
+    decide9 acc = let
+            ts = map (\(qi, t) -> addPrefix (constructorOrVariable qi) t) acc'
+            acc' = reverse acc
+        in
+            (qualIdent *>= decide10 acc) <!>
+            (finishTupleType empty ts *>= decide8)
+            {-
+            (tokenParenR *> (
+                skipSomeWs *> tokenDoubleArrow *!*> (QualTypeExpr constraints <$> type0) <|>
+                decide8 ts
+            ))
+            -}
+
+    -- starts with a comma-seperated list, current element starts with QualIdent, not yet clear if context or not
+    decide10 :: [(QualIdent, TypeExpr)] -> QualIdent -> Parser QualTypeExpr
+    decide10 acc qi = let
+            acc' = reverse acc
+            t' = constructorOrVariable qi
+            ts = map (\(qi', t) -> addPrefix (constructorOrVariable qi') t) acc'
+        in
+            (finishTupleType (tokenComma *> skipSomeWs) (ts ++ [t']) *>= decide8) <!>
+            (
+                skipSomeWs *> (
+                    ((tokenArrow *!*> type0) *>= (\t -> decide12 (ts ++ [ArrowType t' t]))) <!>
+                    (type0 *>= decide11 acc qi)
+                )
+            ) <!>
+            (tokenParenR *> decide8 (TupleType (ts ++ [t'])))
+    
+    -- starts with a comma-seperated list, current element starts with QualIdent and TypeExpr, not yet clear if context or not
+    decide11 :: [(QualIdent, TypeExpr)] -> QualIdent -> TypeExpr -> Parser QualTypeExpr
+    decide11 acc qi t = let
+            acc' = reverse acc
+            t' = addPrefix (constructorOrVariable qi) t
+            ts = map (\(qi', t'') -> addPrefix (constructorOrVariable qi') t'') acc'
+            ts' = ts ++ [t']
+            constraints = map (uncurry Constraint) acc'
+            constraints' = constraints ++ [Constraint qi t]
+        in
+            case t of
+                ArrowType _ _ -> finishTupleType (tokenComma *> skipSomeWs) ts' *>= decide8
+                ApplyType _ _ -> finishTupleType (tokenComma *> skipSomeWs) ts' *>= decide8
+                _ ->
+                    tokenComma *!*> decide9 ((qi, t):acc) <!>
+                    (
+                        tokenParenR *> (
+                            (QualTypeExpr constraints' <$> (skipSomeWs *> tokenDoubleArrow *!*> type0)) <|>
+                            (decide8 (TupleType ts))
+                        )
+                    )
+    
+    -- starts with TupleType, tuple not yet finished to be parsed
+    decide12 :: [TypeExpr] -> Parser QualTypeExpr
+    decide12 ts = 
+        (tokenParenR *> decide8 (TupleType ts)) <!>
+        (finishTupleType (tokenComma *> skipSomeWs) ts *>= decide8)
+    
+    addPrefix :: TypeExpr -> TypeExpr -> TypeExpr
+    addPrefix p t = case t of
+        ApplyType t1 t2 -> ApplyType (addPrefix p t1) t2
+        ArrowType t1 t2 -> ArrowType (addPrefix p t1) t2
+        _ -> ApplyType p t
+    
     constructorOrVariable :: QualIdent -> TypeExpr
     constructorOrVariable qi = case qi of
         QualIdent Nothing i -> if isVariable i then VariableType i else ConstructorType qi
         _ -> ConstructorType qi
-
-    multipleOrNoConstraints :: Parser QualTypeExpr
-    multipleOrNoConstraints = tokenParenL *> tryList []
-
-    tryList acc = (,) <$> qualIdent <*> ()
--}
+    
+    isVariable :: Ident -> Bool
+    isVariable (Ident s) = all isLower s
+    
+    finishTupleType :: Parser () -> [TypeExpr] -> Parser TypeExpr
+    finishTupleType p ts = p *> ((TupleType . (ts ++)) <$> (parseList tokenComma type0 <* tokenParenR))
+{-
 qualTypeExpr = (QualTypeExpr <$> contextList <*!*> typeExpr) <|> (qualType *>= decide1) <|> ((QualTypeExpr []) <$> typeExpr)
     where
     decide1 :: QualIdent -> Parser QualTypeExpr
@@ -419,7 +548,7 @@ qualTypeExpr = (QualTypeExpr <$> contextList <*!*> typeExpr) <|> (qualType *>= d
 
     arrowOrApply :: TypeExpr -> Parser TypeExpr
     arrowOrApply t = (ArrowType t <$> (skipSomeWs *> tokenArrow *!*> type0)) <|> (foldl1 ApplyType <$> ((t:) <$> many (skipSomeWs *> type2)))
-
+-}
 --- A parser for a Context | {Constraint | (ConstraintList)}
 context :: Parser Context
 context = choice [contextList, parseSingleContext, parseNoContext]
