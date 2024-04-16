@@ -385,7 +385,7 @@ qualTypeExpr = singleOrNoConstraint <!> multipleOrNoConstraints
     -- starts with no constraints but with ArrowType
     decide2 :: QualIdent -> TypeExpr -> Parser QualTypeExpr
     decide2 qi t = 
-        yield $ QualTypeExpr [] (addPrefix (constructorOrVariable qi) t)
+        yield $ QualTypeExpr [] (ArrowType (constructorOrVariable qi) t)
 
     -- starts with QualIdent and TypeExpr
     decide3 :: QualIdent -> TypeExpr -> Parser QualTypeExpr
