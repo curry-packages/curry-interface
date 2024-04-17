@@ -352,7 +352,7 @@ tupleType :: Parser TypeExpr
 tupleType = convert <$> parseList tokenComma type0
     where
     convert ts = case ts of
-        [t] -> t
+        [t] -> ParenType t
         _   -> TupleType ts
 
 -- bracketType ::= '[' type0 ']'
