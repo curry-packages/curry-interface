@@ -12,17 +12,18 @@ data Options = Options
   , optWithHiding   :: Bool -- print `hiding` information?
   , optWithInstance :: Bool -- print detailed `instance` information?
   , optIndent       :: Int  -- the number of columns for indention
+  , optHelp         :: Bool -- show help (used in main tool)
   }
 
 --- The default options for pretty printing: show everything
 defaultOptions :: Options
-defaultOptions = Options True True True True 2
+defaultOptions = Options True True True True 2 False
 
 --- pretty-print a Curry interface
 ppInterface :: Options -> Interface -> Doc
 ppInterface options (Interface mident decls1 decls2) =
     string "interface" <+> ppModuleIdent options mident <+> string "where" <+>
-    lbrace <$+$> ((vsep . punctuate semi) (pdecls1 ++ pdecls2)) <$$> rbrace
+    lbrace <> linebreak <> ((vsep . punctuate semi) (pdecls1 ++ pdecls2)) <$$> rbrace
     where
     pdecls1 = filter (not . isEmpty) (map (ppImportDecl options) decls1)
     pdecls2 = filter (not . isEmpty) (map (ppDecl options) decls2)
