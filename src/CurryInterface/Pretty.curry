@@ -79,8 +79,12 @@ ppDecl opts (IClassDecl ctx qualId mkind id mDecls pragmas) =
   ppMethodDecls opts mDecls <+> ppHiddenPragma opts pragmas
 ppDecl opts (IInstanceDecl ctx qualId itype mImpls mIdent)
   | optWithInstance opts && (optWithImports opts || isNothing mIdent)
-  = string "instance" <+> ppContext opts ctx <+> ppQualIdent opts 0 qualId <+> ppInstance opts itype <+>
-    ppImplementations opts mImpls <> ppMaybe (\x -> space <> ppModulePragma opts x) mIdent
+  = string "instance" <+> ppContext opts ctx <+> ppQualIdent opts 0 qualId <+>
+    ppInstance opts itype <+>
+    (if optWithArity opts && optWithHiding opts -- show all details?
+       then ppImplementations opts mImpls <>
+            ppMaybe (\x -> space <> ppModulePragma opts x) mIdent
+       else empty)
   | otherwise = empty
 
 --- pretty-print an arity
@@ -99,11 +103,7 @@ ppInfix _ Infix  = string "infix"
 
 --- pretty-print an Ident
 ppIdent :: Options -> Int -> Ident -> Doc
-ppIdent _ p (Ident id)
-  | p >= 1 && isOperator id = parens t
-  | otherwise = t
- where
-  t = string id
+ppIdent _ p (Ident id) = parensIf (p >= 1 && isOperator id) (string id)
 
 --- pretty-print a QualIdent
 ppQualIdent :: Options -> Int -> QualIdent -> Doc
@@ -179,18 +179,15 @@ ppMethodPragma opts id = lpragma <+> string "METHOD" <+> ppIdent opts 0 id <+> r
 --- pretty-print a type declaration
 ppType :: Options -> Int -> TypeExpr -> Doc
 ppType opts _ (ConstructorType qualId) = ppQualIdent opts 0 qualId
-ppType opts _ (ApplyType texp1 texp2) =
-  ppType opts 0 texp1 <+> ppType opts 0 texp2
+ppType opts p (ApplyType texp1 texp2) =
+  parensIf (p >= 1) (ppType opts 1 texp1 <+> ppType opts 1 texp2)
 ppType opts _ (VariableType i) = ppIdent opts 0 i
 ppType opts _ (TupleType texps) =
   parens ((hcat . punctuate (string ", ")) (map (ppType opts 0) texps))
 ppType opts _ (ListType texps) =
   brackets ((hcat . punctuate (string ", ")) (map (ppType opts 0) texps))
-ppType opts p (ArrowType texp1 texp2)
-  | p >= 1 = parens t
-  | otherwise = t
- where
-  t = ppType opts 1 texp1 <+> rarrow <+> ppType opts 0 texp2
+ppType opts p (ArrowType texp1 texp2) =
+  parensIf (p >= 1) (ppType opts 1 texp1 <+> rarrow <+> ppType opts 0 texp2)
 ppType opts _ (ParenType texp) = parens (ppType opts 0 texp)
 ppType _ _ (ForallType _ _) = string "FORALLTYPE"
 
@@ -230,7 +227,7 @@ ppMethodDecls opts mDecls = case mDecls of
 
 --- pretty-print an instance
 ppInstance :: Options -> InstanceType -> Doc
-ppInstance opts i = ppType opts 0 i
+ppInstance opts it = ppType opts 1 it
 
 --- pretty-print a method implementation
 ppImplementation :: Options -> IMethodImpl -> Doc
@@ -250,11 +247,8 @@ ppImplementations opts mImpls = case mImpls of
 --- pretty-print a kind expression
 ppKindExpr :: Options -> Int -> KindExpr -> Doc
 ppKindExpr _       _ Star = string "*"
-ppKindExpr opts p (ArrowKind k1 k2)
-  | p >= 1 = parens t
-  | otherwise = t
- where
-  t = ppKindExpr opts 1 k1 <+> rarrow <+> ppKindExpr opts 0 k2
+ppKindExpr opts p (ArrowKind k1 k2) =
+  parensIf (p >= 1) (ppKindExpr opts 1 k1 <+> rarrow <+> ppKindExpr opts 0 k2)
 
 --- HELPER FUNCTIONS
 --- pretty-print Just as normal, Nothing as empty
