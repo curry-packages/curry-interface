@@ -129,7 +129,7 @@ ppQualIdent :: Options -> Int -> QualIdent -> Doc
 ppQualIdent opts p (QualIdent Nothing id) = ppIdent opts p id
 ppQualIdent opts p (QualIdent (Just mident) id)
   | optQualify opts = ppModuleIdent opts mident <> dot <> ppIdent opts p id
-  | otherwise = ppIdent opts p id
+  | otherwise       = ppIdent opts p id
 
 --- pretty-print a QualIdent with an optional kind expression
 ppWithOptionalKind :: Options -> QualIdent -> Maybe KindExpr -> Doc
@@ -189,15 +189,17 @@ ppModulePragma opts mid = lpragma <+> string "MODULE" <+> ppModuleIdent opts mid
 ppHiddenPragma :: Options -> [Ident] -> Doc
 ppHiddenPragma opts pragmas = case pragmas of
     [] -> empty
-    _ -> space <> lpragma <+> string "HIDING" <+> (hsep . punctuate comma) (map (ppIdent opts 0) pragmas) <+> rpragma
+    _  -> space <> lpragma <+> string "HIDING" <+>
+          (hsep . punctuate comma) (map (ppIdent opts 0) pragmas) <+> rpragma
 
 --- pretty-print a method pragma
 ppMethodPragma :: Options -> Ident -> Doc
-ppMethodPragma opts id = lpragma <+> string "METHOD" <+> ppIdent opts 0 id <+> rpragma
+ppMethodPragma opts id =
+  lpragma <+> string "METHOD" <+> ppIdent opts 0 id <+> rpragma
 
 --- pretty-print a type declaration
 ppType :: Options -> Int -> TypeExpr -> Doc
-ppType opts _ (ConstructorType qualId) = ppQualIdent opts 0 qualId
+ppType opts _ (ConstructorType qualId) = ppQualIdent opts 1 qualId
 ppType opts _ (VariableType i) = ppIdent opts 0 i
 ppType opts _ (TupleType texps) =
   parens ((hcat . punctuate (string ", ")) (map (ppType opts 0) texps))
@@ -218,7 +220,8 @@ ppType opts _ (ParenType texp) = parens (ppType opts 0 texp)
 ppType _ _ (ForallType _ _) = string "FORALLTYPE"
 ppType opts p texp@(ApplyType texp1 texp2) = parensIf (p > 0) $
   maybe (ppType opts 1 texp1 <+> ppType opts 1 texp2)
-        (\qid -> (ppQualIdent opts 0 qid <+> hsep (map (ppType opts 0) (argsOfApply texp))))
+        (\qid -> (ppQualIdent opts 1 qid <+>
+                  hsep (map (ppType opts 0) (argsOfApply texp))))
         (funOfApply texp)
  where
   argsOfApply te = case te of
@@ -247,7 +250,7 @@ ppContext opts ctx = case ctx of
 --- pretty-print a method declaration
 ppMethodDecl :: Options -> IMethodDecl -> Doc
 ppMethodDecl opts (IMethodDecl id mari qualTExp) =
-  ppIdent opts 0 id <+> 
+  ppIdent opts 1 id <+> 
   (if optWithArity opts then ppMaybe (ppArity opts) mari else empty) <+>
   doubleColon <+> ppQualType opts qualTExp
 
@@ -267,7 +270,7 @@ ppInstance opts it = ppType opts 1 it
 --- pretty-print a method implementation
 ppImplementation :: Options -> IMethodImpl -> Doc
 ppImplementation opts (id, ari) =
-  ppIdent opts 0 id <+>
+  ppIdent opts 1 id <+>
   (if optWithArity opts then ppArity opts ari else empty)
 
 --- pretty-print a list of method implementations
