@@ -6,7 +6,7 @@ module CurryInterface.Parser where
 
 import CurryInterface.Types
 
-import Prelude hiding ((*>), (<*), (<*>), (<$>), (<|>), many, empty, some, failure)
+import Prelude hiding ((*>), (<*), (<*>), (<$>), (<|>), many, empty, some)
 import Data.List (init, last)
 import DetParse
 

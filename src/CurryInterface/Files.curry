@@ -48,5 +48,5 @@ readCurryInterfaceFile filename = do
    readExistingICURRY fname = do
      icurrystring <- readFile fname
      -- for testing:
-     putStrLn icurrystring
+     --putStrLn icurrystring
      return $ parseCurryInterface icurrystring

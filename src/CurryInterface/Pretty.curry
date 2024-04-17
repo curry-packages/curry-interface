@@ -7,28 +7,29 @@ import Text.Pretty
 
 --- Options to influence the pretty printing of Curry interfaces.
 data Options = Options
-  { optQualify    :: Bool -- print identifiers with module qualifier?
-  , optWithArity  :: Bool -- print arity of operations?
-  , optWithHiding :: Bool -- print `hiding` information?
-  , optIndent     :: Int  -- the number of columns for indention
+  { optQualify      :: Bool -- print identifiers with module qualifier?
+  , optWithArity    :: Bool -- print arity of operations?
+  , optWithHiding   :: Bool -- print `hiding` information?
+  , optWithInstance :: Bool -- print detailed `instance` information?
+  , optIndent       :: Int  -- the number of columns for indention
   }
 
 --- The default options for pretty printing: show everything
 defaultOptions :: Options
-defaultOptions = Options True True True 2
+defaultOptions = Options True True True True 2
 
 --- pretty-print a Curry interface
 ppInterface :: Options -> Interface -> Doc
 ppInterface options (Interface mident decls1 decls2) =
     string "interface" <+> ppModuleIdent options mident <+> string "where" <+>
-    lbrace <> linebreak <> ((vsep . punctuate semi) (pdecls1 ++ pdecls2)) <$$> rbrace
+    lbrace <$+$> ((vsep . punctuate semi) (pdecls1 ++ pdecls2)) <$$> rbrace
     where
     pdecls1 = filter (not . isEmpty) (map (ppImportDecl options) decls1)
     pdecls2 = filter (not . isEmpty) (map (ppDecl options) decls2)
 
 --- pretty-print a ModuleIdent
 ppModuleIdent :: Options -> ModuleIdent -> Doc
-ppModuleIdent options (ModuleIdent ids) =
+ppModuleIdent _ (ModuleIdent ids) =
     hcat (punctuate dot (map string ids))
 
 --- pretty-print an import declaration
@@ -61,27 +62,29 @@ ppDecl options (HidingClassDecl ctx qualId mkind id)
 ppDecl options (IClassDecl ctx qualId mkind id mDecls pragmas) =
     string "class" <+> ppContext options ctx <+> ppWithOptionalKind options qualId mkind <+> ppTypeVariable options id <+>
     ppMethodDecls options mDecls <+> ppHiddenPragma options pragmas
-ppDecl options (IInstanceDecl ctx qualId itype mImpls mIdent) =
-    string "instance" <+> ppContext options ctx <+> ppQualIdent options 0 qualId <+> ppInstance options itype <+>
+ppDecl options (IInstanceDecl ctx qualId itype mImpls mIdent)
+  | optWithInstance options
+  = string "instance" <+> ppContext options ctx <+> ppQualIdent options 0 qualId <+> ppInstance options itype <+>
     ppImplementations options mImpls <> ppMaybe (\x -> space <> ppModulePragma options x) mIdent
+  | otherwise = empty
 
 --- pretty-print an arity
 ppArity :: Options -> Arity -> Doc
-ppArity options = int
+ppArity _ = int
 
 --- pretty-print a precedence
 ppPrecedence :: Options -> Precedence -> Doc 
-ppPrecedence options = int
+ppPrecedence _ = int
 
 --- pretty-print an infix declaration
 ppInfix :: Options -> Infix -> Doc
-ppInfix options InfixL = string "infixl"
-ppInfix options InfixR = string "infixr"
-ppInfix options Infix  = string "infix"
+ppInfix _ InfixL = string "infixl"
+ppInfix _ InfixR = string "infixr"
+ppInfix _ Infix  = string "infix"
 
 --- pretty-print an Ident
 ppIdent :: Options -> Int -> Ident -> Doc
-ppIdent options p (Ident id)
+ppIdent _ p (Ident id)
     | p >= 1 && isOperator id = parens t
     | otherwise = t
     where
@@ -159,7 +162,7 @@ ppType options p (ArrowType texp1 texp2)
     where
     t = ppType options 1 texp1 <+> rarrow <+> ppType options 0 texp2
 ppType options _ (ParenType texp) = parens (ppType options 0 texp)
-ppType options _ (ForallType ids texp) = string "FORALLTYPE"
+ppType _ _ (ForallType _ _) = string "FORALLTYPE"
 
 --- pretty-print a QualType
 ppQualType :: Options -> QualTypeExpr -> Doc
@@ -206,7 +209,7 @@ ppImplementations options mImpls = case mImpls of
 
 --- pretty-print a kind expression
 ppKindExpr :: Options -> Int -> KindExpr -> Doc
-ppKindExpr options _ Star = string "*"
+ppKindExpr _       _ Star = string "*"
 ppKindExpr options p (ArrowKind k1 k2)
     | p >= 1 = parens t
     | otherwise = t
