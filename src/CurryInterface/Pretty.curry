@@ -1,9 +1,10 @@
 module CurryInterface.Pretty where
 
-import CurryInterface.Types
-
 import Prelude hiding (empty)
+import Data.Maybe     ( isNothing )
 import Text.Pretty
+
+import CurryInterface.Types
 
 --- Options to influence the pretty printing of Curry interfaces.
 data Options = Options
@@ -11,22 +12,24 @@ data Options = Options
   , optWithArity    :: Bool -- print arity of operations?
   , optWithHiding   :: Bool -- print `hiding` information?
   , optWithInstance :: Bool -- print detailed `instance` information?
+  , optWithImports  :: Bool -- show also information about imported entities?
   , optIndent       :: Int  -- the number of columns for indention
   , optHelp         :: Bool -- show help (used in main tool)
   }
 
 --- The default options for pretty printing: show everything
 defaultOptions :: Options
-defaultOptions = Options True True True True 2 False
+defaultOptions = Options True True True True True 2 False
 
 --- pretty-print a Curry interface
 ppInterface :: Options -> Interface -> Doc
 ppInterface options (Interface mident decls1 decls2) =
-    string "interface" <+> ppModuleIdent options mident <+> string "where" <+>
-    lbrace <> linebreak <> ((vsep . punctuate semi) (pdecls1 ++ pdecls2)) <$$> rbrace
-    where
-    pdecls1 = filter (not . isEmpty) (map (ppImportDecl options) decls1)
-    pdecls2 = filter (not . isEmpty) (map (ppDecl options) decls2)
+  string "interface" <+> ppModuleIdent options mident <+> string "where" <+>
+  lbrace <> linebreak <>
+  ((vsep . punctuate semi) (pdecls1 ++ pdecls2)) <$$> rbrace
+ where
+  pdecls1 = filter (not . isEmpty) (map (ppImportDecl options) decls1)
+  pdecls2 = filter (not . isEmpty) (map (ppDecl options) decls2)
 
 --- pretty-print a ModuleIdent
 ppModuleIdent :: Options -> ModuleIdent -> Doc
@@ -64,7 +67,7 @@ ppDecl options (IClassDecl ctx qualId mkind id mDecls pragmas) =
     string "class" <+> ppContext options ctx <+> ppWithOptionalKind options qualId mkind <+> ppTypeVariable options id <+>
     ppMethodDecls options mDecls <+> ppHiddenPragma options pragmas
 ppDecl options (IInstanceDecl ctx qualId itype mImpls mIdent)
-  | optWithInstance options
+  | optWithInstance options && (optWithImports options || isNothing mIdent)
   = string "instance" <+> ppContext options ctx <+> ppQualIdent options 0 qualId <+> ppInstance options itype <+>
     ppImplementations options mImpls <> ppMaybe (\x -> space <> ppModulePragma options x) mIdent
   | otherwise = empty
@@ -158,39 +161,46 @@ ppType options _ (VariableType i) = ppIdent options 0 i
 ppType options _ (TupleType texps) = parens ((hcat . punctuate (string ", ")) (map (ppType options 0) texps))
 ppType options _ (ListType texps) = brackets ((hcat . punctuate (string ", ")) (map (ppType options 0) texps))
 ppType options p (ArrowType texp1 texp2)
-    | p >= 1 = parens t
-    | otherwise = t
-    where
-    t = ppType options 1 texp1 <+> rarrow <+> ppType options 0 texp2
+  | p >= 1 = parens t
+  | otherwise = t
+ where
+  t = ppType options 1 texp1 <+> rarrow <+> ppType options 0 texp2
 ppType options _ (ParenType texp) = parens (ppType options 0 texp)
 ppType _ _ (ForallType _ _) = string "FORALLTYPE"
 
 --- pretty-print a QualType
 ppQualType :: Options -> QualTypeExpr -> Doc
-ppQualType options (QualTypeExpr ctx texp) = ppContext options ctx <+> ppType options 0 texp
+ppQualType options (QualTypeExpr ctx texp) =
+  ppContext options ctx <+> ppType options 0 texp
 
 --- pretty-print a constraint
 ppConstraint :: Options -> Constraint -> Doc
-ppConstraint options (Constraint qualId texp) = ppQualIdent options 0 qualId <+> ppType options 0 texp
+ppConstraint options (Constraint qualId texp) =
+  ppQualIdent options 0 qualId <+> ppType options 0 texp
 
 --- pretty-print a context
 ppContext :: Options -> Context -> Doc
 ppContext options ctx = case ctx of
-    [] -> empty
-    [constr] -> ppConstraint options constr <+> string "=>"
-    _ -> parens ((hcat . punctuate (string ", ")) (map (ppConstraint options) ctx)) <+> doubleArrow
+  []       -> empty
+  [constr] -> ppConstraint options constr <+> string "=>"
+  _        -> parens ((hcat . punctuate (string ", "))
+                        (map (ppConstraint options) ctx)) <+> doubleArrow
 
 --- pretty-print a method declaration
 ppMethodDecl :: Options -> IMethodDecl -> Doc
 ppMethodDecl options (IMethodDecl id mari qualTExp) =
-    ppIdent options 0 id <+> 
-    (if optWithArity options then ppMaybe (ppArity options) mari else empty) <+> doubleColon <+> ppQualType options qualTExp
+  ppIdent options 0 id <+> 
+  (if optWithArity options then ppMaybe (ppArity options) mari else empty) <+>
+  doubleColon <+> ppQualType options qualTExp
 
 --- pretty-print a list of method declarations
 ppMethodDecls :: Options -> [IMethodDecl] -> Doc
 ppMethodDecls options mDecls = case mDecls of
-    [] -> lbrace <$$> rbrace
-    _  -> lbrace <$$> (nest (optIndent options) . indent (optIndent options)) ((vsep . punctuate semi) (map (ppMethodDecl options) mDecls)) <$$> rbrace
+  [] -> lbrace <$$> rbrace
+  _  -> lbrace <$$>
+        (nest (optIndent options) . indent (optIndent options))
+           ((vsep . punctuate semi) (map (ppMethodDecl options) mDecls)) <$$>
+        rbrace
 
 --- pretty-print an instance
 ppInstance :: Options -> InstanceType -> Doc
@@ -205,8 +215,11 @@ ppImplementation options (id, ari) =
 --- pretty-print a list of method implementations
 ppImplementations :: Options -> [IMethodImpl] -> Doc
 ppImplementations options mImpls = case mImpls of
-    [] -> lbrace <$$> rbrace
-    _ -> lbrace <$$> (nest (optIndent options) . indent (optIndent options)) ((vsep . punctuate (string "; ")) (map (ppImplementation options) mImpls)) <$$> rbrace
+  [] -> lbrace <$$> rbrace
+  _  -> lbrace <$$>
+        (nest (optIndent options) . indent (optIndent options))
+           ((vsep . punctuate (string "; "))
+              (map (ppImplementation options) mImpls)) <$$> rbrace
 
 --- pretty-print a kind expression
 ppKindExpr :: Options -> Int -> KindExpr -> Doc
