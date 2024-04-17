@@ -24,7 +24,7 @@ data IImportDecl = IImportDecl ModuleIdent
 --- Arity of a function
 type Arity = Int
 
--- Operator precedence
+--- Operator precedence
 type Precedence = Int
 
 -- |Fixity of operators
