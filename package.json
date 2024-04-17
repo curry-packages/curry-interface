@@ -19,7 +19,7 @@
   "exportedModules": [ "CurryInterface.Files", "CurryInterface.Pretty"
                      , "CurryInterface.Types" ],
   "executable": {
-      "name": "curry-showint",
+      "name": "curry-showinterface",
       "main": "ShowInterface"
   },
   "source": {
