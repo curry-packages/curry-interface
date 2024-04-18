@@ -1,6 +1,7 @@
 module CurryInterface.Pretty where
 
 import Prelude hiding ( empty )
+import Data.List      ( intersperse )
 import Data.Maybe     ( isNothing )
 import Text.Pretty
 
@@ -57,24 +58,33 @@ ppDecl opts (HidingDataDecl qualId mkind tvars)
 ppDecl opts (IDataDecl qualId mkind tvars constrs pragmas) =
   (if optWithInstance opts
      then ppdata
-     else (vsep . punctuate semi)
-            (ppdata :
-             map ppInst (filter (isInstanceOf qualId) (optInstances opts))))
+     else ppdata <$$>
+          ppDeriving (filter (isInstanceOf qualId) (optInstances opts)))
  where
-  ppdata =
-    string "data" <+> ppWithOptionalKind opts qualId mkind <+>
-    ppTypeVariables opts tvars <$$>
+  ppdatalhs = string "data" <+> ppWithOptionalKind opts qualId mkind <+>
+              ppTypeVariables opts tvars
+
+  ppdata = ppdatalhs <+>
     (if null constrs
        then empty
-       else (nest (optIndent opts) . indent (optIndent opts)) equals <+>
-            ppConstructors opts constrs) <>
+       else if optWithHiding opts -- show all details --> with line breaks
+              then linebreak <>
+                   (nest (optIndent opts) . indent (optIndent opts)) equals <+>
+                   ppConstructors opts constrs
+              else equals <+>
+                   hsep (intersperse bar (map (ppConstructor opts) constrs))) <>
     ppHiddenPragma opts pragmas
 
-  ppInst idecl = case idecl of
-    IInstanceDecl ctx qid itype _ _ ->
-      string "instance" <+> ppContext opts ctx <+> ppQualIdent opts 0 qid <+>
-      ppInstance opts itype
-    _                               ->  empty -- should not occur
+  ppDeriving []          = empty
+  ppDeriving insts@(_:_) =
+    indent (optIndent opts)
+      (string "deriving" <+>
+       parensIf (length insts > 1)
+         ((hcat . punctuate (string ", ")) (map classOf insts)))
+   where
+    classOf idecl = case idecl of
+      IInstanceDecl _ qid _ _ _ -> ppQualIdent opts 0 qid
+      _                         -> empty -- should not occur
 
 ppDecl opts (INewtypeDecl qualId mkind tvars newconstr pragmas) =
   string "newtype" <+> ppWithOptionalKind opts qualId mkind <+>
