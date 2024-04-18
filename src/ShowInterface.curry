@@ -13,6 +13,7 @@ module ShowInterface
  where
 
 import Control.Monad         ( unless, when )
+import Data.Maybe
 import System.Environment    ( getArgs )
 import System.Console.GetOpt
 
@@ -22,6 +23,7 @@ import Text.Pretty
 
 import CurryInterface.Files
 import CurryInterface.Pretty
+import CurryInterface.Types
 
 ------------------------------------------------------------------------------
 banner :: String
@@ -44,12 +46,20 @@ main = do
 showInterface :: Options -> String -> IO ()
 showInterface opts mname = do
   ic <- readCurryInterface mname
+  --print ic -- only for debugging
+  let Interface _ _ idecls = ic
+      linsts  = filter isLocalInstance idecls
+      modopts = opts { optModule = mname, optInstances = linsts }
   putStrLn $ line ++ "\nInterface of module '" ++ mname ++ "':\n" ++ line
-  putStrLn $ pPrint $ ppInterface opts ic
+  putStrLn $ pPrint $ ppInterface modopts ic
  where
   line = take 70 (repeat '-')
 
+  isLocalInstance id = case id of
+    IInstanceDecl _ _ _ _ Nothing -> True
+    _                             -> False
 
+------------------------------------------------------------------------------
 --- Process the actual command line argument and return the options
 --- and the name of the main program.
 processOptions :: Options -> [String] -> IO (Options,[String])
@@ -75,13 +85,13 @@ options =
            (NoArg (\opts -> opts { optHelp = True }))
            "print help and exit"
   , Option "a" ["all"]
-           (NoArg (\opts -> opts { optWithImports = True, optWithHiding = True
-                                 , optWithInstance = True
+           (NoArg (\opts -> opts { optWithImports = True, optWithString = False
+                                 , optWithHiding = True, optWithInstance = True
                                  , optQualify = True, optWithArity = True }))
            "show all details of the interface"
   , Option "i" ["instances"]
            (NoArg (\opts -> opts { optWithInstance = True }))
-           "show class instances"
+           "show detailed class instances"
   , Option "q" ["qualify"]
            (NoArg (\opts -> opts { optQualify = True }))
            "show module qualifications"

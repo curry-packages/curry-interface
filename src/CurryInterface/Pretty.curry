@@ -1,6 +1,6 @@
 module CurryInterface.Pretty where
 
-import Prelude hiding (empty)
+import Prelude hiding ( empty )
 import Data.Maybe     ( isNothing )
 import Text.Pretty
 
@@ -8,18 +8,21 @@ import CurryInterface.Types
 
 --- Options to influence the pretty printing of Curry interfaces.
 data Options = Options
-  { optQualify      :: Bool -- print identifiers with module qualifier?
-  , optWithArity    :: Bool -- print arity of operations?
-  , optWithHiding   :: Bool -- print `hiding` information?
-  , optWithInstance :: Bool -- print detailed `instance` information?
-  , optWithImports  :: Bool -- show also information about imported entities?
-  , optIndent       :: Int  -- the number of columns for indention
-  , optHelp         :: Bool -- show help (used in main tool)
+  { optModule       :: String  -- name of current module
+  , optInstances    :: [IDecl] -- locally defined class instances
+  , optQualify      :: Bool    -- show identifiers with module qualifier?
+  , optWithString   :: Bool    -- show type `[Char]` as `String`?
+  , optWithArity    :: Bool    -- show arity of operations?
+  , optWithHiding   :: Bool    -- show `hiding` information?
+  , optWithInstance :: Bool    -- show detailed `instance` information?
+  , optWithImports  :: Bool    -- show also information about imported entities?
+  , optIndent       :: Int     -- the number of columns for indention
+  , optHelp         :: Bool    -- show help (used in main tool)
   }
 
 --- The default options for pretty printing: show everything
 defaultOptions :: Options
-defaultOptions = Options True True True True True 2 False
+defaultOptions = Options "" [] True True True True True True 2 False
 
 --- pretty-print a Curry interface
 ppInterface :: Options -> Interface -> Doc
@@ -50,11 +53,29 @@ ppDecl opts (HidingDataDecl qualId mkind tvars)
   = string "hiding data" <+> ppWithOptionalKind opts qualId mkind <+>
     ppTypeVariables opts tvars
   | otherwise = empty
+
 ppDecl opts (IDataDecl qualId mkind tvars constrs pragmas) =
-  string "data" <+> ppWithOptionalKind opts qualId mkind <+>
-  ppTypeVariables opts tvars <$$>
-  (nest (optIndent opts) . indent (optIndent opts)) equals <+>
-  ppConstructors opts constrs <> ppHiddenPragma opts pragmas
+  (if optWithInstance opts
+     then ppdata
+     else (vsep . punctuate semi)
+            (ppdata :
+             map ppInst (filter (isInstanceOf qualId) (optInstances opts))))
+ where
+  ppdata =
+    string "data" <+> ppWithOptionalKind opts qualId mkind <+>
+    ppTypeVariables opts tvars <$$>
+    (if null constrs
+       then empty
+       else (nest (optIndent opts) . indent (optIndent opts)) equals <+>
+            ppConstructors opts constrs) <>
+    ppHiddenPragma opts pragmas
+
+  ppInst idecl = case idecl of
+    IInstanceDecl ctx qid itype _ _ ->
+      string "instance" <+> ppContext opts ctx <+> ppQualIdent opts 0 qid <+>
+      ppInstance opts itype
+    _                               ->  empty -- should not occur
+
 ppDecl opts (INewtypeDecl qualId mkind tvars newconstr pragmas) =
   string "newtype" <+> ppWithOptionalKind opts qualId mkind <+>
   ppTypeVariables opts tvars <+> 
@@ -81,10 +102,8 @@ ppDecl opts (IInstanceDecl ctx qualId itype mImpls mIdent)
   | optWithInstance opts && (optWithImports opts || isNothing mIdent)
   = string "instance" <+> ppContext opts ctx <+> ppQualIdent opts 0 qualId <+>
     ppInstance opts itype <+>
-    (if optWithArity opts && optWithHiding opts -- show all details?
-       then ppImplementations opts mImpls <>
-            ppMaybe (\x -> space <> ppModulePragma opts x) mIdent
-       else empty)
+    ppImplementations opts mImpls <>
+    ppMaybe (\x -> space <> ppModulePragma opts x) mIdent
   | otherwise = empty
 
 --- pretty-print an arity
@@ -110,7 +129,7 @@ ppQualIdent :: Options -> Int -> QualIdent -> Doc
 ppQualIdent opts p (QualIdent Nothing id) = ppIdent opts p id
 ppQualIdent opts p (QualIdent (Just mident) id)
   | optQualify opts = ppModuleIdent opts mident <> dot <> ppIdent opts p id
-  | otherwise = ppIdent opts p id
+  | otherwise       = ppIdent opts p id
 
 --- pretty-print a QualIdent with an optional kind expression
 ppWithOptionalKind :: Options -> QualIdent -> Maybe KindExpr -> Doc
@@ -170,26 +189,45 @@ ppModulePragma opts mid = lpragma <+> string "MODULE" <+> ppModuleIdent opts mid
 ppHiddenPragma :: Options -> [Ident] -> Doc
 ppHiddenPragma opts pragmas = case pragmas of
     [] -> empty
-    _ -> space <> lpragma <+> string "HIDING" <+> (hsep . punctuate comma) (map (ppIdent opts 0) pragmas) <+> rpragma
+    _  -> space <> lpragma <+> string "HIDING" <+>
+          (hsep . punctuate comma) (map (ppIdent opts 0) pragmas) <+> rpragma
 
 --- pretty-print a method pragma
 ppMethodPragma :: Options -> Ident -> Doc
-ppMethodPragma opts id = lpragma <+> string "METHOD" <+> ppIdent opts 0 id <+> rpragma
+ppMethodPragma opts id =
+  lpragma <+> string "METHOD" <+> ppIdent opts 0 id <+> rpragma
 
 --- pretty-print a type declaration
 ppType :: Options -> Int -> TypeExpr -> Doc
-ppType opts _ (ConstructorType qualId) = ppQualIdent opts 0 qualId
-ppType opts p (ApplyType texp1 texp2) =
-  parensIf (p >= 1) (ppType opts 1 texp1 <+> ppType opts 1 texp2)
+ppType opts _ (ConstructorType qualId) = ppQualIdent opts 1 qualId
 ppType opts _ (VariableType i) = ppIdent opts 0 i
 ppType opts _ (TupleType texps) =
   parens ((hcat . punctuate (string ", ")) (map (ppType opts 0) texps))
-ppType opts _ (ListType texps) =
-  brackets ((hcat . punctuate (string ", ")) (map (ppType opts 0) texps))
+ppType opts _ (ListType texps)
+  | optWithString opts &&
+    (optModule opts == "Prelude" && texps == [localCharType] ||
+     texps == [preludeCharType])
+  = string "String"
+  | otherwise
+  = brackets ((hcat . punctuate (string ", ")) (map (ppType opts 0) texps))
 ppType opts p (ArrowType texp1 texp2) =
-  parensIf (p >= 1) (ppType opts 1 texp1 <+> rarrow <+> ppType opts 0 texp2)
+  parensIf (p >= 1) (ppType opts (if isArrowType texp1 then 1 else 0) texp1 <+>
+                     rarrow <+> ppType opts 0 texp2)
+ where
+  isArrowType te = case te of ArrowType _ _ -> True
+                              _             -> False
 ppType opts _ (ParenType texp) = parens (ppType opts 0 texp)
 ppType _ _ (ForallType _ _) = string "FORALLTYPE"
+ppType opts p texp@(ApplyType texp1 texp2) = parensIf (p > 0) $
+  maybe (ppType opts 1 texp1 <+> ppType opts 1 texp2)
+        (\qid -> (ppQualIdent opts 1 qid <+>
+                  hsep (map (ppType opts 0) (argsOfApply texp))))
+        (funOfApply texp)
+ where
+  argsOfApply te = case te of
+    ApplyType (ConstructorType _) ta -> [ta]
+    ApplyType t1         t2          -> argsOfApply t1 ++ [t2]
+    _                                -> [] -- should not occur
 
 --- pretty-print a QualType
 ppQualType :: Options -> QualTypeExpr -> Doc
@@ -212,7 +250,7 @@ ppContext opts ctx = case ctx of
 --- pretty-print a method declaration
 ppMethodDecl :: Options -> IMethodDecl -> Doc
 ppMethodDecl opts (IMethodDecl id mari qualTExp) =
-  ppIdent opts 0 id <+> 
+  ppIdent opts 1 id <+> 
   (if optWithArity opts then ppMaybe (ppArity opts) mari else empty) <+>
   doubleColon <+> ppQualType opts qualTExp
 
@@ -232,7 +270,7 @@ ppInstance opts it = ppType opts 1 it
 --- pretty-print a method implementation
 ppImplementation :: Options -> IMethodImpl -> Doc
 ppImplementation opts (id, ari) =
-  ppIdent opts 0 id <+>
+  ppIdent opts 1 id <+>
   (if optWithArity opts then ppArity opts ari else empty)
 
 --- pretty-print a list of method implementations
@@ -269,3 +307,29 @@ lpragma = string "{-#"
 --- pretty-print "-#}"
 rpragma :: Doc
 rpragma = string "-#}"
+
+------------------------------------------------------------------------------
+-- Auxiliaries:
+
+--- `Prelude.Char` type.
+preludeCharType :: TypeExpr
+preludeCharType =
+  ConstructorType (QualIdent (Just (ModuleIdent ["Prelude"])) (Ident "Char"))
+--- Local `Char` type.
+localCharType :: TypeExpr
+localCharType = ConstructorType (QualIdent Nothing (Ident "Char"))
+
+isInstanceOf :: QualIdent -> IDecl -> Bool
+isInstanceOf qtc idecl = case idecl of
+  IInstanceDecl _ _ te _ _  -> case te of
+                                 ConstructorType qc -> qc == qtc
+                                 ParenType pt -> funOfApply pt == Just qtc
+                                 _            -> funOfApply te == Just qtc
+  _                         -> False
+
+funOfApply :: TypeExpr -> Maybe QualIdent
+funOfApply te = case te of ApplyType (ConstructorType qc) _ -> Just qc
+                           ApplyType t1                   _ -> funOfApply t1
+                           _                                -> Nothing
+
+------------------------------------------------------------------------------
