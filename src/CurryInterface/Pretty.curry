@@ -321,14 +321,15 @@ localCharType = ConstructorType (QualIdent Nothing (Ident "Char"))
 
 isInstanceOf :: QualIdent -> IDecl -> Bool
 isInstanceOf qtc idecl = case idecl of
-  IInstanceDecl _ _ te _ _  -> te == ConstructorType qtc ||
-                               funOfApply te == Just qtc
+  IInstanceDecl _ _ te _ _  -> case te of
+                                 ConstructorType qc -> qc == qtc
+                                 ParenType pt -> funOfApply pt == Just qtc
+                                 _            -> funOfApply te == Just qtc
   _                         -> False
 
 funOfApply :: TypeExpr -> Maybe QualIdent
 funOfApply te = case te of ApplyType (ConstructorType qc) _ -> Just qc
                            ApplyType t1                   _ -> funOfApply t1
-                           ParenType t                      -> funOfApply t
                            _                                -> Nothing
 
 ------------------------------------------------------------------------------
