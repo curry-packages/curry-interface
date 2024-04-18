@@ -403,7 +403,7 @@ qualTypeExpr = singleOrNoConstraint <!> multipleOrNoConstraints
                 )
             ) <!>
             (qualIdent *>= decide4) <!>
-            ((type0 <* tokenParenR) *>= decide8)
+            (((type0 *>= (\t -> (yield (ParenType t) <* tokenParenR) <!> ((TupleType . (t:)) <$> (tokenComma *!*> parseList tokenComma type0 <* tokenParenR))))) *>= decide8)
         )
     
     -- starts with QualIdent, all cases still possible
