@@ -66,7 +66,7 @@ ppDecl opts (IDataDecl qualId mkind tvars constrs pragmas) =
 
   ppdata = nest (optIndent opts)
     (case constrs of
-       []   -> empty
+       []   -> ppdatalhs
        c:cs -> if optWithHiding opts -- show all details --> with line breaks
                  then ppdatalhs <$$> equals <+> ppConstructors opts constrs
                  else fillSep (ppdatalhs : (equals <+> ppConstructor opts c) :

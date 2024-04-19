@@ -29,7 +29,7 @@ import CurryInterface.Types
 banner :: String
 banner = unlines [bannerLine, bannerText, bannerLine]
  where
-  bannerText = "Curry Interface Printing Tool (Version of 17/04/24)"
+  bannerText = "Curry Interface Printing Tool (Version of 19/04/24)"
   bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()
