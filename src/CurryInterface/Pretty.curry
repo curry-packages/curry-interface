@@ -28,7 +28,7 @@ defaultOptions = Options "" [] True True True True True True 2 False
 --- pretty-print a Curry interface
 ppInterface :: Options -> Interface -> Doc
 ppInterface options (Interface mident decls1 decls2) =
-  string "interface" <+> ppModuleIdent options mident <+> string "where" <+>
+  text "interface" <+> ppModuleIdent options mident <+> text "where" <+>
   lbrace <> linebreak <>
   ((vsep . punctuate semi) (pdecls1 ++ pdecls2)) <$$> rbrace
  where
@@ -38,20 +38,23 @@ ppInterface options (Interface mident decls1 decls2) =
 --- pretty-print a ModuleIdent
 ppModuleIdent :: Options -> ModuleIdent -> Doc
 ppModuleIdent _ (ModuleIdent ids) =
-    hcat (punctuate dot (map string ids))
+    hcat (punctuate dot (map text ids))
 
 --- pretty-print an import declaration
 ppImportDecl :: Options -> IImportDecl -> Doc
 ppImportDecl options (IImportDecl mident) =
-    string "import" <+> ppModuleIdent options mident
+    text "import" <+> ppModuleIdent options mident
 
 --- pretty-print a declaration
 ppDecl :: Options -> IDecl -> Doc
 ppDecl opts (IInfixDecl inf prec qualId) =
-  ppInfix opts inf <+> ppPrecedence opts prec <+> ppQualIdent opts 0 qualId
+  let ppid = ppQualIdent opts 0 qualId
+  in ppInfix opts inf <+> ppPrecedence opts prec <+>
+     if isOperator (idName (qidIdent qualId)) then ppid else bquotes ppid
+  
 ppDecl opts (HidingDataDecl qualId mkind tvars)
   | optWithHiding opts
-  = string "hiding data" <+> ppWithOptionalKind opts qualId mkind <+>
+  = text "hiding data" <+> ppWithOptionalKind opts qualId mkind <+>
     ppTypeVariables opts tvars
   | otherwise = empty
 
@@ -61,7 +64,7 @@ ppDecl opts (IDataDecl qualId mkind tvars constrs pragmas) =
      else ppdata <$$>
           ppDeriving (filter (isInstanceOf qualId) (optInstances opts)))
  where
-  ppdatalhs = string "data" <+> ppWithOptionalKind opts qualId mkind <+>
+  ppdatalhs = text "data" <+> ppWithOptionalKind opts qualId mkind <+>
               ppTypeVariables opts tvars
 
   ppdata = nest (optIndent opts)
@@ -77,18 +80,18 @@ ppDecl opts (IDataDecl qualId mkind tvars constrs pragmas) =
   ppDeriving insts@(_:_) = hang 11 $
     text " deriving" <+>
     parensIf (length insts > 1)
-      ((fillSep . punctuate (string ", ")) (map classOf insts))
+      ((fillSep . punctuate (text ", ")) (map classOf insts))
    where
     classOf idecl = case idecl of
       IInstanceDecl _ qid _ _ _ -> ppQualIdent opts 0 qid
       _                         -> empty -- should not occur
 
 ppDecl opts (INewtypeDecl qualId mkind tvars newconstr pragmas) =
-  string "newtype" <+> ppWithOptionalKind opts qualId mkind <+>
+  text "newtype" <+> ppWithOptionalKind opts qualId mkind <+>
   ppTypeVariables opts tvars <+> 
   equals <+> ppNewConstructor opts newconstr <> ppHiddenPragma opts pragmas
 ppDecl opts (ITypeDecl qualId mkind tvars texp) =
-  string "type" <+> ppWithOptionalKind opts qualId mkind <+>
+  text "type" <+> ppWithOptionalKind opts qualId mkind <+>
   ppTypeVariables opts tvars <+>
   equals <+> ppType opts 0 texp
 ppDecl opts (IFunctionDecl qualId prag ari qualTExp) =
@@ -99,16 +102,16 @@ ppDecl opts (IFunctionDecl qualId prag ari qualTExp) =
     , doubleColon, ppQualType opts qualTExp ]
 ppDecl opts (HidingClassDecl ctx qualId mkind id)
   | optWithHiding opts
-  = string "hiding class" <+> ppContext opts ctx <+>
+  = text "hiding class" <+> ppContext opts ctx <+>
     ppWithOptionalKind opts qualId mkind <+> ppTypeVariable opts id
   | otherwise = empty
 ppDecl opts (IClassDecl ctx qualId mkind id mDecls pragmas) =
-  string "class" <+> ppContext opts ctx <+>
+  text "class" <+> ppContext opts ctx <+>
   ppWithOptionalKind opts qualId mkind <+> ppTypeVariable opts id <+>
   ppMethodDecls opts mDecls <+> ppHiddenPragma opts pragmas
 ppDecl opts (IInstanceDecl ctx qualId itype mImpls mIdent)
   | optWithInstance opts && (optWithImports opts || isNothing mIdent)
-  = string "instance" <+> ppContext opts ctx <+> ppQualIdent opts 0 qualId <+>
+  = text "instance" <+> ppContext opts ctx <+> ppQualIdent opts 0 qualId <+>
     ppInstance opts itype <+>
     ppImplementations opts mImpls <>
     ppMaybe (\x -> space <> ppModulePragma opts x) mIdent
@@ -124,13 +127,16 @@ ppPrecedence _ = int
 
 --- pretty-print an infix declaration
 ppInfix :: Options -> Infix -> Doc
-ppInfix _ InfixL = string "infixl"
-ppInfix _ InfixR = string "infixr"
-ppInfix _ Infix  = string "infix"
+ppInfix _ InfixL = text "infixl"
+ppInfix _ InfixR = text "infixr"
+ppInfix _ Infix  = text "infix"
 
---- pretty-print an Ident
+--- Pretty-print an Ident. If the second argument is non-zero,
+--- operators (i.e., strings with special characters) will be
+--- enclosed in parentheses.
 ppIdent :: Options -> Int -> Ident -> Doc
-ppIdent _ p (Ident id) = parensIf (p >= 1 && isOperator id) (string id)
+ppIdent _ p (Ident id) =
+  parensIf (p >= 1 && isOperator id) (text id)
 
 --- pretty-print a QualIdent
 ppQualIdent :: Options -> Int -> QualIdent -> Doc
@@ -185,38 +191,38 @@ ppField opts (FieldDecl ids t) =
 ppFields :: Options -> [FieldDecl] -> Doc
 ppFields opts fields =
   lbrace <+>
-  ((hcat . punctuate (string ", ")) (map (ppField opts) fields)) <+>
+  ((hcat . punctuate (text ", ")) (map (ppField opts) fields)) <+>
   rbrace
 
 --- pretty-print a module pragma
 ppModulePragma :: Options -> ModuleIdent -> Doc
-ppModulePragma opts mid = lpragma <+> string "MODULE" <+> ppModuleIdent opts mid <+> rpragma
+ppModulePragma opts mid = lpragma <+> text "MODULE" <+> ppModuleIdent opts mid <+> rpragma
 
 --- pretty-print a hidden pragma
 ppHiddenPragma :: Options -> [Ident] -> Doc
 ppHiddenPragma opts pragmas = case pragmas of
     [] -> empty
-    _  -> space <> lpragma <+> string "HIDING" <+>
+    _  -> space <> lpragma <+> text "HIDING" <+>
           (hsep . punctuate comma) (map (ppIdent opts 0) pragmas) <+> rpragma
 
 --- pretty-print a method pragma
 ppMethodPragma :: Options -> Ident -> Doc
 ppMethodPragma opts id =
-  lpragma <+> string "METHOD" <+> ppIdent opts 0 id <+> rpragma
+  lpragma <+> text "METHOD" <+> ppIdent opts 0 id <+> rpragma
 
 --- pretty-print a type declaration
 ppType :: Options -> Int -> TypeExpr -> Doc
 ppType opts _ (ConstructorType qualId) = ppQualIdent opts 1 qualId
 ppType opts _ (VariableType i) = ppIdent opts 0 i
 ppType opts _ (TupleType texps) =
-  parens ((hcat . punctuate (string ", ")) (map (ppType opts 0) texps))
+  parens ((hcat . punctuate (text ", ")) (map (ppType opts 0) texps))
 ppType opts _ (ListType texps)
   | optWithString opts &&
     (optModule opts == "Prelude" && texps == [localCharType] ||
      texps == [preludeCharType])
-  = string "String"
+  = text "String"
   | otherwise
-  = brackets ((hcat . punctuate (string ", ")) (map (ppType opts 0) texps))
+  = brackets ((hcat . punctuate (text ", ")) (map (ppType opts 0) texps))
 ppType opts p (ArrowType texp1 texp2) =
   parensIf (p >= 1) (ppType opts (if isArrowType texp1 then 1 else 0) texp1 </>
                      rarrow <+> ppType opts 0 texp2)
@@ -224,7 +230,7 @@ ppType opts p (ArrowType texp1 texp2) =
   isArrowType te = case te of ArrowType _ _ -> True
                               _             -> False
 ppType opts _ (ParenType texp) = parens (ppType opts 0 texp)
-ppType _ _ (ForallType _ _) = string "FORALLTYPE"
+ppType _ _ (ForallType _ _) = text "FORALLTYPE"
 ppType opts p texp@(ApplyType texp1 texp2) = parensIf (p > 0) $
   maybe (ppType opts 1 texp1 <+> ppType opts 1 texp2)
         (\qid -> (ppQualIdent opts 1 qid <+>
@@ -250,8 +256,8 @@ ppConstraint opts (Constraint qualId texp) =
 ppContext :: Options -> Context -> Doc
 ppContext opts ctx = case ctx of
   []       -> empty
-  [constr] -> ppConstraint opts constr <+> string "=>"
-  _        -> parens ((hcat . punctuate (string ", "))
+  [constr] -> ppConstraint opts constr <+> text "=>"
+  _        -> parens ((hcat . punctuate (text ", "))
                         (map (ppConstraint opts) ctx)) <+> doubleArrow
 
 --- pretty-print a method declaration
@@ -287,12 +293,12 @@ ppImplementations opts mImpls = case mImpls of
   [] -> lbrace <$$> rbrace
   _  -> lbrace <$$>
         (nest (optIndent opts) . indent (optIndent opts))
-           ((vsep . punctuate (string "; "))
+           ((vsep . punctuate (text "; "))
               (map (ppImplementation opts) mImpls)) <$$> rbrace
 
 --- pretty-print a kind expression
 ppKindExpr :: Options -> Int -> KindExpr -> Doc
-ppKindExpr _       _ Star = string "*"
+ppKindExpr _       _ Star = text "*"
 ppKindExpr opts p (ArrowKind k1 k2) =
   parensIf (p >= 1) (ppKindExpr opts 1 k1 <+> rarrow <+> ppKindExpr opts 0 k2)
 
@@ -310,11 +316,11 @@ isOperator = all (flip elem allowed)
 
 --- pretty-print "{-#"
 lpragma :: Doc
-lpragma = string "{-#"
+lpragma = text "{-#"
 
 --- pretty-print "-#}"
 rpragma :: Doc
-rpragma = string "-#}"
+rpragma = text "-#}"
 
 ------------------------------------------------------------------------------
 -- Auxiliaries:
@@ -323,6 +329,7 @@ rpragma = string "-#}"
 preludeCharType :: TypeExpr
 preludeCharType =
   ConstructorType (QualIdent (Just (ModuleIdent ["Prelude"])) (Ident "Char"))
+
 --- Local `Char` type.
 localCharType :: TypeExpr
 localCharType = ConstructorType (QualIdent Nothing (Ident "Char"))
