@@ -283,22 +283,25 @@ constrDecl = (Ident <$> ident *>= decide1) <|> constrDeclOp
 
     case2 :: Ident -> Parser ConstrDecl
     --case2 i = many (skipSomeWs *> typeExpr) *>= decide2 i
-    case2 i = (:) <$> typeExpr <*> many (skipSomeWs *> typeExpr) *>= decide2 i
+    case2 i = (:) <$> type2 <*> many (skipSomeWs *> type2) *>= decide2 i
 
     decide2 :: Ident -> [TypeExpr] -> Parser ConstrDecl
     decide2 i ts =
         (ConOpDecl (foldl1 ApplyType (ConstructorType (identToQualIdent i):ts)) <$> (Ident <$> operator) <*!*> typeExpr) <!>
         yield (ConstrDecl i ts)
 
+{-
 --- A parser for a simple Constructor Declaration | Ident TypeExprList
 constrDeclSimple :: Parser ConstrDecl
 constrDeclSimple =
     (uncurry ConstrDecl) <$> parseConstructor
+-}
 
 --- A parser for an Operator Constructor Declaration | TypeExpr Op TypeExpr
 constrDeclOp :: Parser ConstrDecl
 constrDeclOp = ConOpDecl <$> typeExpr <*!*> (Ident <$> operator) <*!*> typeExpr
 
+{-
 --- A parser for a Record Constructor Declaration | Ident \{ FieldDeclList \}
 constrDeclRecord :: Parser ConstrDecl
 constrDeclRecord = 
@@ -309,6 +312,7 @@ constrDeclRecord =
             parseList tokenComma fieldDecl
             <*!* tokenCurlyBracketR
         )
+-}
 
 --- A parser for a Type Expression
 typeExpr :: Parser TypeExpr
@@ -709,11 +713,13 @@ optional p = Just <$> p <|> yield Nothing
 parseSinglePragma :: Parser () -> Parser Ident
 parseSinglePragma token = tokenPragmaL *!*> token *!*> (Ident <$> ident) <*!* tokenPragmaR
 
+{-
 parseConstructor :: Parser (Ident, [TypeExpr])
 parseConstructor = 
     (,) <$>
         (Ident <$> ident) <*>
         many (skipSomeWs *> typeExpr)
+-}
 
 withOptionalKind :: (a -> Maybe KindExpr -> b) -> Parser a -> Parser b
 withOptionalKind c p = withKind <|> withoutKind
