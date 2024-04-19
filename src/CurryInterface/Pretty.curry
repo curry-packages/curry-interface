@@ -1,6 +1,7 @@
 module CurryInterface.Pretty where
 
 import Prelude hiding ( empty )
+import Data.List      ( intersperse )
 import Data.Maybe     ( isNothing )
 import Text.Pretty
 
@@ -57,24 +58,30 @@ ppDecl opts (HidingDataDecl qualId mkind tvars)
 ppDecl opts (IDataDecl qualId mkind tvars constrs pragmas) =
   (if optWithInstance opts
      then ppdata
-     else (vsep . punctuate semi)
-            (ppdata :
-             map ppInst (filter (isInstanceOf qualId) (optInstances opts))))
+     else ppdata <$$>
+          ppDeriving (filter (isInstanceOf qualId) (optInstances opts)))
  where
-  ppdata =
-    string "data" <+> ppWithOptionalKind opts qualId mkind <+>
-    ppTypeVariables opts tvars <$$>
-    (if null constrs
-       then empty
-       else (nest (optIndent opts) . indent (optIndent opts)) equals <+>
-            ppConstructors opts constrs) <>
+  ppdatalhs = string "data" <+> ppWithOptionalKind opts qualId mkind <+>
+              ppTypeVariables opts tvars
+
+  ppdata = nest (optIndent opts)
+    (case constrs of
+       []   -> empty
+       c:cs -> if optWithHiding opts -- show all details --> with line breaks
+                 then ppdatalhs <$$> equals <+> ppConstructors opts constrs
+                 else fillSep (ppdatalhs : (equals <+> ppConstructor opts c) :
+                               map (bar <+>) (map (ppConstructor opts) cs))) <>
     ppHiddenPragma opts pragmas
 
-  ppInst idecl = case idecl of
-    IInstanceDecl ctx qid itype _ _ ->
-      string "instance" <+> ppContext opts ctx <+> ppQualIdent opts 0 qid <+>
-      ppInstance opts itype
-    _                               ->  empty -- should not occur
+  ppDeriving []          = empty
+  ppDeriving insts@(_:_) = hang 11 $
+    text " deriving" <+>
+    parensIf (length insts > 1)
+      ((fillSep . punctuate (string ", ")) (map classOf insts))
+   where
+    classOf idecl = case idecl of
+      IInstanceDecl _ qid _ _ _ -> ppQualIdent opts 0 qid
+      _                         -> empty -- should not occur
 
 ppDecl opts (INewtypeDecl qualId mkind tvars newconstr pragmas) =
   string "newtype" <+> ppWithOptionalKind opts qualId mkind <+>
@@ -85,10 +92,11 @@ ppDecl opts (ITypeDecl qualId mkind tvars texp) =
   ppTypeVariables opts tvars <+>
   equals <+> ppType opts 0 texp
 ppDecl opts (IFunctionDecl qualId prag ari qualTExp) =
-  ppQualIdent opts 1 qualId <>
-  ppMaybe (\x -> space <> ppMethodPragma opts x) prag <+>
-  (if optWithArity opts then ppArity opts ari else empty) <+>
-  doubleColon <+> ppQualType opts qualTExp
+  nest (optIndent opts) $ fillSep
+    [ ppQualIdent opts 1 qualId
+    , ppMaybe (\x -> space <> ppMethodPragma opts x) prag
+    , if optWithArity opts then ppArity opts ari else empty
+    , doubleColon, ppQualType opts qualTExp ]
 ppDecl opts (HidingClassDecl ctx qualId mkind id)
   | optWithHiding opts
   = string "hiding class" <+> ppContext opts ctx <+>
@@ -156,7 +164,7 @@ ppNewConstructor opts (NewRecordDecl id1 (id2, t)) =
 --- pretty-print a constructor declaration
 ppConstructor :: Options -> ConstrDecl -> Doc
 ppConstructor opts (ConstrDecl id texps) =
-  ppIdent opts 0 id <+> hsep (map (ppType opts 0) texps)
+  hsep (ppIdent opts 0 id : map (ppType opts 0) texps)
 ppConstructor opts (ConOpDecl t1 id t2) =
   ppType opts 0 t1 <+> ppIdent opts 0 id <+> ppType opts 0 t2
 ppConstructor opts (RecordDecl id fields) =
@@ -165,8 +173,7 @@ ppConstructor opts (RecordDecl id fields) =
 --- pretty-print a list of constructor declarations
 ppConstructors :: Options -> [ConstrDecl] -> Doc
 ppConstructors opts constrs =
-  nest (optIndent opts)
-    (compose (\d1 d2 -> d1 $$ bar <+> d2) (map (ppConstructor opts) constrs))
+  compose (\d1 d2 -> d1 $$ bar <+> d2) (map (ppConstructor opts) constrs)
 
 --- pretty-print a field declaration
 ppField :: Options -> FieldDecl -> Doc
@@ -211,7 +218,7 @@ ppType opts _ (ListType texps)
   | otherwise
   = brackets ((hcat . punctuate (string ", ")) (map (ppType opts 0) texps))
 ppType opts p (ArrowType texp1 texp2) =
-  parensIf (p >= 1) (ppType opts (if isArrowType texp1 then 1 else 0) texp1 <+>
+  parensIf (p >= 1) (ppType opts (if isArrowType texp1 then 1 else 0) texp1 </>
                      rarrow <+> ppType opts 0 texp2)
  where
   isArrowType te = case te of ArrowType _ _ -> True
@@ -250,9 +257,10 @@ ppContext opts ctx = case ctx of
 --- pretty-print a method declaration
 ppMethodDecl :: Options -> IMethodDecl -> Doc
 ppMethodDecl opts (IMethodDecl id mari qualTExp) =
-  ppIdent opts 1 id <+> 
-  (if optWithArity opts then ppMaybe (ppArity opts) mari else empty) <+>
-  doubleColon <+> ppQualType opts qualTExp
+  nest (optIndent opts) $ fillSep
+    [ ppIdent opts 1 id
+    , if optWithArity opts then ppMaybe (ppArity opts) mari else empty
+    , doubleColon, ppQualType opts qualTExp]
 
 --- pretty-print a list of method declarations
 ppMethodDecls :: Options -> [IMethodDecl] -> Doc
