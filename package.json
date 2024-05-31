@@ -24,7 +24,7 @@
       "main": "ShowInterface"
   },
   "source": {
-      "git": "https://git.ps.informatik.uni-kiel.de/curry-packages/curry-interface.git",
+      "git": "https://github.com/curry-packages/curry-interface.git",
       "tag": "$version"
   }
 }
