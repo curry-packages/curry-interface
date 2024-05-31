@@ -13,4 +13,6 @@ and returns the structure of the interface.
 The module `CurryInterface.Pretty` contains pretty-printing operations
 for interfaces, parameterized with various options.
 These are used in the tool `curry-showinterface`, generated when
-isntalling this package, to print the interface of a Curry module.
+installing this package, to print the interface of a Curry module.
+This tool is used in Curry REPLs to implement the command `:interface`.
+
