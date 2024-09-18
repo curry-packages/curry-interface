@@ -17,6 +17,12 @@
       "process"       : ">= 3.0.0, < 4.0.0",
       "wl-pprint"     : ">= 3.0.0, < 4.0.0"
   },
+  "compilerCompatibility": {
+      "pakcs"   : "< 3.8.0",
+      "kics2"   : "< 3.3.0",
+      "curry2go": "< 1.5.0",
+      "kmcc"    : "< 1.0.0"
+  },
   "exportedModules": [ "CurryInterface.Files", "CurryInterface.Pretty"
                      , "CurryInterface.Types" ],
   "executable": {
