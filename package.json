@@ -1,6 +1,6 @@
 {
   "name": "curry-interface",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Dennis Thomsen <stu232874@mail.uni-kiel.de>",
   "maintainer": "Michael Hanus <mh@informatik.uni-kiel.de>",
   "synopsis": "Libraries to represent and read module interfaces of Curry programs",
@@ -18,10 +18,10 @@
       "wl-pprint"     : ">= 3.0.0, < 4.0.0"
   },
   "compilerCompatibility": {
-      "pakcs"   : "< 3.8.0",
-      "kics2"   : "< 3.3.0",
-      "curry2go": "< 1.5.0",
-      "kmcc"    : "< 1.0.0"
+      "pakcs"   : ">= 3.8.0, < 4.0.0",
+      "kics2"   : ">= 3.3.0, < 4.0.0",
+      "curry2go": ">= 1.5.0, < 2.0.0",
+      "kmcc"    : ">= 1.0.0, < 2.0.0"
   },
   "exportedModules": [ "CurryInterface.Files", "CurryInterface.Pretty"
                      , "CurryInterface.Types" ],
