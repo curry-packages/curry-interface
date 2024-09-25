@@ -349,7 +349,7 @@ preludeCharType =
 localCharType :: TypeExpr
 localCharType = ConstructorType (QualIdent Nothing (Ident "Char"))
 
---- Check if an instance of some type class is defined for a given identifier.
+--- Checks if an instance of some type class is defined for a given identifier.
 --- 
 --- This function is used to determine whether the `deriving` clause of a
 --- data declaration should be shown. If the instance of the type class

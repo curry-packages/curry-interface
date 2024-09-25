@@ -425,11 +425,6 @@ qualTypeExpr = singleOrNoConstraint <!> multipleOrNoConstraints
         (QualTypeExpr [Constraint qi ts] <$> (skipSomeWs *> tokenDoubleArrow *!*> type0)) <!>
         (yield (QualTypeExpr [] t'))
 
-{-  ifContext t = case t of
-        VariableType _ -> yield [t]
-        ApplyType l r  -> ifContext l *>= \ts1 -> ifContext r *>= \ts2 -> yield (ts1 ++ ts2)
-        _              -> failure -}
-
     multipleOrNoConstraints :: Parser QualTypeExpr
     multipleOrNoConstraints =
         tokenParenL *> (
@@ -460,8 +455,7 @@ qualTypeExpr = singleOrNoConstraint <!> multipleOrNoConstraints
         --(tokenParenR *> decide8 t') <!>
         case t of
             ArrowType _ _ -> ((tokenParenR *> yield t') <!> (finishTupleType (tokenComma *> skipSomeWs) [t'])) *>= decide8
-            -- ApplyType _ _ -> finishTupleType (tokenComma *> skipSomeWs) [t'] *>= decide8
-            _ -> tokenComma *!*> decide9 [(qi, t)]
+            _             -> tokenComma *!*> decide9 [(qi, t)]
 
     -- starts with no context, starts with an ArrowType or a TupleType starting with an ArrowType
     decide6 :: QualIdent -> TypeExpr -> Parser QualTypeExpr
