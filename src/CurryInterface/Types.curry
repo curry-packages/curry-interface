@@ -4,6 +4,8 @@
 --- These definitions are adapted from the Haskell definition contained
 --- in the implementation of the Curry front end, see
 --- <https://git.ps.informatik.uni-kiel.de/curry/curry-frontend/-/blob/master/src/Curry/Syntax/Type.hs>
+---
+--- @version September 2024
 ------------------------------------------------------------------------------
 
 module CurryInterface.Types where
@@ -43,8 +45,8 @@ data IDecl
   | INewtypeDecl    QualIdent (Maybe KindExpr) [Ident] NewConstrDecl [Ident]
   | ITypeDecl       QualIdent (Maybe KindExpr) [Ident] TypeExpr
   | IFunctionDecl   QualIdent (Maybe Ident) Arity QualTypeExpr
-  | HidingClassDecl Context QualIdent (Maybe KindExpr) Ident
-  | IClassDecl      Context QualIdent (Maybe KindExpr) Ident [IMethodDecl] [Ident]
+  | HidingClassDecl Context QualIdent (Maybe KindExpr) [Ident] [FunDep]
+  | IClassDecl      Context QualIdent (Maybe KindExpr) [Ident] [FunDep] [IMethodDecl] [Ident]
   | IInstanceDecl   Context QualIdent InstanceType [IMethodImpl] (Maybe ModuleIdent)
  deriving (Eq, Read, Show)
 
@@ -58,6 +60,7 @@ type IMethodImpl = (Ident, Arity)
 --- Kind expressions
 data KindExpr
   = Star
+  | ConstraintKind
   | ArrowKind KindExpr KindExpr
     deriving (Eq, Read, Show)
 
@@ -145,15 +148,16 @@ data TypeExpr
 
 -- |Qualified type expressions
 data QualTypeExpr = QualTypeExpr Context TypeExpr
-    deriving (Eq, Read, Show)
-
+  deriving (Eq, Read, Show)
 
 type Context = [Constraint]
 
-data Constraint = Constraint QualIdent TypeExpr
-    deriving (Eq, Read, Show)
+data Constraint = Constraint QualIdent [TypeExpr]
+  deriving (Eq, Read, Show)
 
-type InstanceType = TypeExpr
+type InstanceType = [TypeExpr]
 
+data FunDep = FunDep [Ident] [Ident]
+  deriving (Eq, Read, Show)
 
 -----------------------------------------------------------------------

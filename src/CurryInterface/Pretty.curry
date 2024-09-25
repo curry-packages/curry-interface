@@ -1,3 +1,9 @@
+------------------------------------------------------------------------------
+--- This library provides a pretty-printer for Curry interfaces.
+---
+--- @version September 2024
+------------------------------------------------------------------------------
+
 module CurryInterface.Pretty where
 
 import Prelude hiding ( empty )
@@ -100,14 +106,14 @@ ppDecl opts (IFunctionDecl qualId prag ari qualTExp) =
     , ppMaybe (\x -> space <> ppMethodPragma opts x) prag
     , if optWithArity opts then ppArity opts ari else empty
     , doubleColon, ppQualType opts qualTExp ]
-ppDecl opts (HidingClassDecl ctx qualId mkind id)
+ppDecl opts (HidingClassDecl ctx qualId mkind ids fdeps)
   | optWithHiding opts
   = text "hiding class" <+> ppContext opts ctx <+>
-    ppWithOptionalKind opts qualId mkind <+> ppTypeVariable opts id
+    ppWithOptionalKind opts qualId mkind <+> hsep (map (ppTypeVariable opts) ids) <+> ppFunDeps opts fdeps
   | otherwise = empty
-ppDecl opts (IClassDecl ctx qualId mkind id mDecls pragmas) =
+ppDecl opts (IClassDecl ctx qualId mkind ids fdeps mDecls pragmas) =
   text "class" <+> ppContext opts ctx <+>
-  ppWithOptionalKind opts qualId mkind <+> ppTypeVariable opts id <+>
+  ppWithOptionalKind opts qualId mkind <+> hsep (map (ppTypeVariable opts) ids) <+> ppFunDeps opts fdeps <+>
   ppMethodDecls opts mDecls <+> ppHiddenPragma opts pragmas
 ppDecl opts (IInstanceDecl ctx qualId itype mImpls mIdent)
   | optWithInstance opts && (optWithImports opts || isNothing mIdent)
@@ -116,6 +122,14 @@ ppDecl opts (IInstanceDecl ctx qualId itype mImpls mIdent)
     ppImplementations opts mImpls <>
     ppMaybe (\x -> space <> ppModulePragma opts x) mIdent
   | otherwise = empty
+
+-- pretty-print the functional dependencies of a class declaration
+ppFunDeps :: Options -> [FunDep] -> Doc
+ppFunDeps opts fdeps | null fdeps = empty
+                     | otherwise  = text "|" <+> sep (punctuate comma (map (ppFunDep opts) fdeps))
+ where
+  ppFunDep :: Options -> FunDep -> Doc
+  ppFunDep opts' (FunDep lhs rhs) = sep (map (ppIdent opts' 0) lhs) <+> rarrow <+> sep (map (ppIdent opts' 0) rhs)
 
 --- pretty-print an arity
 ppArity :: Options -> Arity -> Doc
@@ -249,8 +263,8 @@ ppQualType opts (QualTypeExpr ctx texp) =
 
 --- pretty-print a constraint
 ppConstraint :: Options -> Constraint -> Doc
-ppConstraint opts (Constraint qualId texp) =
-  ppQualIdent opts 0 qualId <+> ppType opts 0 texp
+ppConstraint opts (Constraint qualId ts) =
+  ppQualIdent opts 0 qualId <+> hsep (map (ppType opts 0) ts)
 
 --- pretty-print a context
 ppContext :: Options -> Context -> Doc
@@ -279,7 +293,7 @@ ppMethodDecls opts mDecls = case mDecls of
 
 --- pretty-print an instance
 ppInstance :: Options -> InstanceType -> Doc
-ppInstance opts it = ppType opts 1 it
+ppInstance opts it = hsep $ map (ppType opts 1) it
 
 --- pretty-print a method implementation
 ppImplementation :: Options -> IMethodImpl -> Doc
@@ -298,9 +312,10 @@ ppImplementations opts mImpls = case mImpls of
 
 --- pretty-print a kind expression
 ppKindExpr :: Options -> Int -> KindExpr -> Doc
-ppKindExpr _       _ Star = text "*"
 ppKindExpr opts p (ArrowKind k1 k2) =
   parensIf (p >= 1) (ppKindExpr opts 1 k1 <+> rarrow <+> ppKindExpr opts 0 k2)
+ppKindExpr _    _ Star           = text "*"
+ppKindExpr _    _ ConstraintKind = text "Constraint"
 
 --- HELPER FUNCTIONS
 --- pretty-print Just as normal, Nothing as empty
@@ -334,13 +349,20 @@ preludeCharType =
 localCharType :: TypeExpr
 localCharType = ConstructorType (QualIdent Nothing (Ident "Char"))
 
+--- Check if an instance of some type class is defined for a given identifier.
+--- 
+--- This function is used to determine whether the `deriving` clause of a
+--- data declaration should be shown. If the instance of the type class
+--- is defined locally, it is shown; otherwise, it is not shown.
+---
+--- Note that this only makes sense for type classes with a single type parameter.
 isInstanceOf :: QualIdent -> IDecl -> Bool
 isInstanceOf qtc idecl = case idecl of
-  IInstanceDecl _ _ te _ _  -> case te of
+  IInstanceDecl _ _ [te] _ _  -> case te of
                                  ConstructorType qc -> qc == qtc
                                  ParenType pt -> funOfApply pt == Just qtc
                                  _            -> funOfApply te == Just qtc
-  _                         -> False
+  _                           -> False
 
 funOfApply :: TypeExpr -> Maybe QualIdent
 funOfApply te = case te of ApplyType (ConstructorType qc) _ -> Just qc
