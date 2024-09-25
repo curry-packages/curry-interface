@@ -24,7 +24,7 @@ pTrace fn p = \s -> trace (fn ++ ": " ++ takeWhile (/= '\n') s) $ p s
 
 --- A parser for the text of a Curry interface.
 parseCurryInterface :: String -> Interface
-parseCurryInterface txt = trace txt $ case parse interface txt of
+parseCurryInterface txt = case parse interface txt of
     Nothing -> error "Parsing failed"
     Just i -> i
 --parseCurryInterface _ = error "parseCurryInterface not yet implemented"
