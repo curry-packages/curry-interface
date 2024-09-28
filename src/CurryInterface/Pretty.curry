@@ -22,14 +22,15 @@ data Options = Options
   , optWithArity    :: Bool    -- show arity of operations?
   , optWithHiding   :: Bool    -- show `hiding` information?
   , optWithInstance :: Bool    -- show detailed `instance` information?
-  , optWithImports  :: Bool    -- show also information about imported entities?
+  , optWithImports  :: Bool    -- show information about imported entities?
+  , optWithKinds    :: Bool    -- show kind expressions?
   , optIndent       :: Int     -- the number of columns for indention
   , optHelp         :: Bool    -- show help (used in main tool)
   }
 
 --- The default options for pretty printing: show everything
 defaultOptions :: Options
-defaultOptions = Options "" [] True True True True True True 2 False
+defaultOptions = Options "" [] True True True True True True True 2 False
 
 --- pretty-print a Curry interface
 ppInterface :: Options -> Interface -> Doc
@@ -109,11 +110,13 @@ ppDecl opts (IFunctionDecl qualId prag ari qualTExp) =
 ppDecl opts (HidingClassDecl ctx qualId mkind ids fdeps)
   | optWithHiding opts
   = text "hiding class" <+> ppContext opts ctx <+>
-    ppWithOptionalKind opts qualId mkind <+> hsep (map (ppTypeVariable opts) ids) <+> ppFunDeps opts fdeps
+    ppWithOptionalKind opts qualId mkind <+>
+    hsep (map (ppTypeVariable opts) ids) <+> ppFunDeps opts fdeps
   | otherwise = empty
 ppDecl opts (IClassDecl ctx qualId mkind ids fdeps mDecls pragmas) =
   text "class" <+> ppContext opts ctx <+>
-  ppWithOptionalKind opts qualId mkind <+> hsep (map (ppTypeVariable opts) ids) <+> ppFunDeps opts fdeps <+>
+  ppWithOptionalKind opts qualId mkind <+>
+  hsep (map (ppTypeVariable opts) ids) <+> ppFunDeps opts fdeps <+>
   ppMethodDecls opts mDecls <+> ppHiddenPragma opts pragmas
 ppDecl opts (IInstanceDecl ctx qualId itype mImpls mIdent)
   | optWithInstance opts && (optWithImports opts || isNothing mIdent)
@@ -125,11 +128,14 @@ ppDecl opts (IInstanceDecl ctx qualId itype mImpls mIdent)
 
 -- pretty-print the functional dependencies of a class declaration
 ppFunDeps :: Options -> [FunDep] -> Doc
-ppFunDeps opts fdeps | null fdeps = empty
-                     | otherwise  = text "|" <+> sep (punctuate comma (map (ppFunDep opts) fdeps))
+ppFunDeps opts fdeps
+  | null fdeps = empty
+  | otherwise  = text "|" <+> sep (punctuate comma (map (ppFunDep opts) fdeps))
  where
   ppFunDep :: Options -> FunDep -> Doc
-  ppFunDep opts' (FunDep lhs rhs) = sep (map (ppIdent opts' 0) lhs) <+> rarrow <+> sep (map (ppIdent opts' 0) rhs)
+  ppFunDep opts' (FunDep lhs rhs) =
+    sep (map (ppIdent opts' 0) lhs) <+> rarrow <+>
+    sep (map (ppIdent opts' 0) rhs)
 
 --- pretty-print an arity
 ppArity :: Options -> Arity -> Doc
@@ -162,8 +168,11 @@ ppQualIdent opts p (QualIdent (Just mident) id)
 --- pretty-print a QualIdent with an optional kind expression
 ppWithOptionalKind :: Options -> QualIdent -> Maybe KindExpr -> Doc
 ppWithOptionalKind opts qualId Nothing = ppQualIdent opts 0 qualId
-ppWithOptionalKind opts qualId (Just k) =
-  parens (ppQualIdent opts 0 qualId <+> doubleColon <+> ppKindExpr opts 0 k)
+ppWithOptionalKind opts qualId (Just k)
+  | optWithKinds opts
+  = parens (ppQualIdent opts 0 qualId <+> doubleColon <+> ppKindExpr opts 0 k)
+  | otherwise
+  = ppQualIdent opts 0 qualId
 
 --- pretty-print a type variable
 ppTypeVariable :: Options -> Ident -> Doc
