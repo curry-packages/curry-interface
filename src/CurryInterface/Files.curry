@@ -1,5 +1,7 @@
 ------------------------------------------------------------------------------
 --- This library defines operations to read Curry interfaces.
+---
+--- @version September 2024
 ------------------------------------------------------------------------------
 
 module CurryInterface.Files where

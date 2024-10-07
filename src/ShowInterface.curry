@@ -6,7 +6,7 @@
 --- pretty-prints it with various options.
 ---
 --- @author Michael Hanus
---- @version April 2024
+--- @version September 2024
 ------------------------------------------------------------------------------
 
 module ShowInterface
@@ -29,7 +29,7 @@ import CurryInterface.Types
 banner :: String
 banner = unlines [bannerLine, bannerText, bannerLine]
  where
-  bannerText = "Curry Interface Printing Tool (Version of 19/04/24)"
+  bannerText = "Curry Interface Printing Tool (Version of 28/09/24)"
   bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()
@@ -37,8 +37,8 @@ main = do
   args <- getArgs
   let dfltopts = defaultOptions
                    { optWithImports = False, optQualify = False
-                   , optWithArity = False
-                   , optWithHiding = False, optWithInstance = False }
+                   , optWithArity = False, optWithHiding = False
+                   , optWithInstance = False, optWithKinds = False }
   (opts,progs) <- processOptions dfltopts args
   mapM_ (runModuleAction (showInterface opts)) progs
 
@@ -87,6 +87,7 @@ options =
   , Option "a" ["all"]
            (NoArg (\opts -> opts { optWithImports = True, optWithString = False
                                  , optWithHiding = True, optWithInstance = True
+                                 , optWithKinds = True
                                  , optQualify = True, optWithArity = True }))
            "show all details of the interface"
   , Option "i" ["instances"]
