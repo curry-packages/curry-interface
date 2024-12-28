@@ -32,5 +32,9 @@
   "source": {
       "git": "https://github.com/curry-packages/curry-interface.git",
       "tag": "$version"
+  },
+  "testsuite": {
+      "src-dir": "examples",
+      "modules": [ "Test" ]
   }
 }
