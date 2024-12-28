@@ -117,7 +117,7 @@ ppDecl opts (IClassDecl ctx qualId mkind ids fdeps mDecls pragmas) =
   text "class" <+> ppContext opts ctx <+>
   ppWithOptionalKind opts qualId mkind <+>
   hsep (map (ppTypeVariable opts) ids) <+> ppFunDeps opts fdeps <+>
-  ppMethodDecls opts mDecls <+> ppHiddenPragma opts pragmas
+  ppMethodDecls opts mDecls <> ppHiddenPragma opts pragmas
 ppDecl opts (IInstanceDecl ctx qualId itype mImpls mIdent)
   | optWithInstance opts && (optWithImports opts || isNothing mIdent)
   = text "instance" <+> ppContext opts ctx <+> ppQualIdent opts 0 qualId <+>

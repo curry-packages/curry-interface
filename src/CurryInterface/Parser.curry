@@ -173,7 +173,7 @@ functionDecl =
 
 --- A parser for a Class Declaration | class [Context =>] QualIdent [KindExpr] TypeVariable \{ MethodList \} [Pragma]
 classDecl :: Parser IDecl
-classDecl = tokenClass *!*> (case1 <|> case2) <*?*> (tokenCurlyBracketL *!*> parseList tokenSemicolon methodDecl <*?* tokenCurlyBracketR) <*> hiddenPragma
+classDecl = tokenClass *!*> (case1 <|> case2) <*?*> (tokenCurlyBracketL *!*> parseList tokenSemicolon methodDecl <*?* tokenCurlyBracketR) <*?*> hiddenPragma
  where
   case1 :: Parser ([IMethodDecl] -> [Ident] -> IDecl)
   case1 = (tokenParenL *> qualIdent <* skipSomeWs) *>= f
