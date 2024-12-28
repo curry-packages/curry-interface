@@ -342,9 +342,9 @@ isOperator = all (flip elem allowed)
 lpragma :: Doc
 lpragma = text "{-#"
 
---- pretty-print "-#}"
+--- pretty-print "#-}"
 rpragma :: Doc
-rpragma = text "-#}"
+rpragma = text "#-}"
 
 ------------------------------------------------------------------------------
 -- Auxiliaries:
