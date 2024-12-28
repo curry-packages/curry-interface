@@ -1,6 +1,6 @@
 {
   "name": "curry-interface",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "author": "Dennis Thomsen <stu232874@mail.uni-kiel.de>",
   "maintainer": "Michael Hanus <mh@informatik.uni-kiel.de>",
   "synopsis": "Libraries to represent and read module interfaces of Curry programs",
