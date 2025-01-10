@@ -1,7 +1,7 @@
 ------------------------------------------------------------------------------
---- This library defines a parser for Curry interfaces.
+--- This library defines a parser for Curry interface files.
 ---
---- @version September 2024
+--- @version January 2025
 ------------------------------------------------------------------------------
 
 module CurryInterface.Parser where
@@ -20,6 +20,7 @@ import Debug.Trace    ( trace )
 --   "fn: <first line of current parser input>"
 -- before applying the parser `p` to the input string.
 pTrace :: String -> Parser a -> Parser a
+--pTrace _ p = p
 pTrace fn p = \s -> trace (fn ++ ": " ++ takeWhile (/= '\n') s) $ p s
 
 --- A parser for the text of a Curry interface.
@@ -68,7 +69,7 @@ decl = choice
 
 --- A parser for an Infix Declaration | Infix Arity Op
 infixDecl :: Parser IDecl
-infixDecl = IInfixDecl <$> iInfix <*!*> precedence <*!*> qualIdent
+infixDecl = IInfixDecl <$> iInfix <*!*> precedence <*!*> qualIdentOp
 
 hidingDecl :: Parser IDecl
 hidingDecl = tokenHiding *!*> (hidingDataDecl <!> hidingClassDecl)
@@ -238,37 +239,50 @@ precedence = parseInt
 arity :: Parser Arity
 arity = parseInt
 
---- A parser for a Qualified Identifier | [IdentList .] {Ident | Operator | \( Operator \)}
+--- A parser for a Qualified Identifier or Operator | [IdentList .] {Ident | Operator}
+qualIdentOp :: Parser QualIdent
+qualIdentOp =
+  QualIdent <$> (optional (moduleIdent <* tokenDot))
+                <*> (Ident <$> (operator <!> ident))
+
+--- A parser for a Qualified Identifier:
+--- \( [IdentList .] Operator \) | [IdentList .] Ident
 qualIdent :: Parser QualIdent
-qualIdent = QualIdent <$> (optional (moduleIdent <* tokenDot)) <*> (Ident <$> finalIdent)
-    where
-    finalIdent :: Parser String
-    finalIdent = tokenParenL *> operator <* tokenParenR <!> operator <!> ident
+qualIdent =
+      (tokenParenL *>
+       (QualIdent <$>
+         (optional (moduleIdent <* tokenDot)) <*> (Ident <$> operator))
+       <* tokenParenR)
+  <!> (QualIdent <$> (optional (moduleIdent <* tokenDot)) <*> (Ident <$> ident))
 
 --- A parser for a List of Identifiers | Ident [. IdentList]
 identList :: Parser [String]
 identList = (:) <$> ident <*> (many (tokenDot *> ident)) <!> yield []
 
---- A parser for an Identifier (not operator)
+--- A longest-match parser for an Identifier (not operator)
 ident :: Parser String
-ident = (:) <$> check isAlpha anyChar <*> many (check condition anyChar)
-    where
-    condition c = isDigit c || isAlpha c || c == '_' || c == '\''
+ident [] = []
+ident (x:xs) | isAlpha x = let (ys,zs) = span isIdChar xs in [(x:ys,zs)]
+             | otherwise = []
+ where
+  isIdChar c = isDigit c || isAlpha c || c == '_' || c == '\''
 
---- A parser for an Operator
+--- A longest-match parser for an Operator
 operator :: Parser String
-operator = tokenBacktick *> ident <* tokenBacktick <!> check stringCondition (some (check charCondition anyChar))
-    where
-    charCondition c = elem c allowed
-    stringCondition s = not (elem s exceptions)
-    allowed = "!#$%&*+./<=>?@\\^|-~:"
-    exceptions = ["..", ":", "::", "=", "\\", "|", "<-", "->", "@", "~", "=>"]
+operator = tokenBacktick *> ident <* tokenBacktick <!> op
+ where
+  op xs = let (ys,zs) = span (`elem` allowed) xs
+          in if null ys || ys `elem` exceptions then [] else [(ys,zs)]
+  allowed = "!#$%&*+./<=>?@\\^|-~:"
+  exceptions = ["..", ":", "::", "=", "\\", "|", "<-", "->", "@", "~", "=>"]
 
---- A parser for a Type Variable
+--- A longest-match parser for a Type Variable
 typeVariable :: Parser String
-typeVariable = (:) <$> check isLower anyChar <*> many (check condition anyChar)
-    where
-    condition c = isAlpha c || isDigit c
+typeVariable [] = []
+typeVariable (x:xs) | isLower x = let (ys,zs) = span isVarChar xs in [(x:ys,zs)]
+                    | otherwise = []
+ where
+  isVarChar c = isAlpha c || isDigit c
 
 --- A parser for a Type Variable List | TypeVariable [TypeVariableList]
 typeVariableList :: Parser [String]
@@ -280,7 +294,9 @@ typeVariableListNE = some (skipManyWs *> typeVariable)
 
 --- A parser for a Hidden Pragma | ADD SYNTAX DESCRIPTION
 hiddenPragma :: Parser [Ident]
-hiddenPragma = (tokenPragmaL *!*> word "HIDING" *!*> (map Ident <$> parseList tokenComma ident) <*!* tokenPragmaR) <!> yield []
+hiddenPragma =
+ (tokenPragmaL *!*> word "HIDING" *!*>
+   (map Ident <$> parseList tokenComma ident) <*!* tokenPragmaR) <!> yield []
 
 --- A parser for a Method Pragma | ADD SYNTAX DESCRIPTION
 methodPragma :: Parser Ident
